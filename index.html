@@ -4264,6 +4264,108 @@ body.user-talent .account-tab.personal-only{
       return { ok: false, error: e.message };
     }
   };
+
+  /**
+   * BRIGADA — Fase 4: Puestos de startup en Supabase.
+   * Crear, listar y eliminar puestos.
+   */
+  window.brigadaCreateJob = async function(job) {
+    try {
+      const { data: { session } } = await window.brigadaSupabase.auth.getSession();
+      if (!session) return { ok: false, error: "No hay sesión activa." };
+      const uid = session.user.id;
+
+      const row = {
+        user_id: uid,
+        title: job.title || null,
+        compensation: job.offerRaw || null,
+        modality: job.modality || null,
+        description: job.desc || null,
+        person_type: job.personTypeText || null,
+        status: job.statusKey || "active"
+      };
+      const { data, error } = await window.brigadaSupabase
+        .from("jobs")
+        .insert(row)
+        .select()
+        .single();
+      if (error) return { ok: false, error: "jobs insert: " + error.message };
+      console.log("✅ Puesto creado en Supabase:", data.id);
+      return { ok: true, id: data.id, created_at: data.created_at };
+    } catch (e) {
+      console.error("❌ brigadaCreateJob excepción:", e);
+      return { ok: false, error: e.message };
+    }
+  };
+
+  window.brigadaLoadMyJobs = async function() {
+    try {
+      const { data: { session } } = await window.brigadaSupabase.auth.getSession();
+      if (!session) return [];
+      const uid = session.user.id;
+      const { data, error } = await window.brigadaSupabase
+        .from("jobs")
+        .select("*")
+        .eq("user_id", uid)
+        .order("created_at", { ascending: false });
+      if (error){ console.error("Error cargando mis puestos:", error); return []; }
+      return data || [];
+    } catch (e) {
+      console.error("❌ brigadaLoadMyJobs excepción:", e);
+      return [];
+    }
+  };
+
+  window.brigadaLoadAllActiveJobs = async function() {
+    try {
+      const { data: jobsData, error: jobErr } = await window.brigadaSupabase
+        .from("jobs")
+        .select("*")
+        .eq("status", "active")
+        .order("created_at", { ascending: false });
+      if (jobErr){ console.error("Error cargando puestos activos:", jobErr); return []; }
+      if (!jobsData || !jobsData.length) return [];
+
+      const userIds = [...new Set(jobsData.map(j => j.user_id).filter(Boolean))];
+      const usersById = {};
+      const profilesById = {};
+      if (userIds.length){
+        const { data: users } = await window.brigadaSupabase
+          .from("users")
+          .select("id,name,city,country,bio,type")
+          .in("id", userIds);
+        (users || []).forEach(u => { usersById[u.id] = u; });
+
+        const { data: profiles } = await window.brigadaSupabase
+          .from("startup_profiles")
+          .select("user_id,stage,what_does,problem,vision,team_type")
+          .in("user_id", userIds);
+        (profiles || []).forEach(p => { profilesById[p.user_id] = p; });
+      }
+
+      return jobsData.map(j => ({
+        ...j,
+        users: usersById[j.user_id] || null,
+        startup_profiles: profilesById[j.user_id] || null
+      }));
+    } catch (e) {
+      console.error("❌ brigadaLoadAllActiveJobs excepción:", e);
+      return [];
+    }
+  };
+
+  window.brigadaDeleteJob = async function(jobId) {
+    try {
+      const { error } = await window.brigadaSupabase
+        .from("jobs")
+        .delete()
+        .eq("id", jobId);
+      if (error) return { ok: false, error: "jobs delete: " + error.message };
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
 /**
    * Maneja el clic en el botón "Entrar" del modal de login.
    * Lee los inputs, valida, llama a brigadaLogin, y si éxito muestra el dashboard.
@@ -4535,6 +4637,53 @@ window.brigadaRefreshAllPublications = async function(){
         problemSolved: tp.problem_solved || "",
         lifeGoals: tp.life_goals || ""
       }
+    });
+  });
+  if(typeof renderDashboard === "function") renderDashboard();
+};
+
+  // ✅ FASE 4: Cargar TODOS los puestos activos desde Supabase
+window.brigadaRefreshAllJobs = async function(){
+  if(!window.brigadaLoadAllActiveJobs) return;
+  const rows = await window.brigadaLoadAllActiveJobs();
+  // Quitar los puestos reales anteriores (mantener los seeds) para evitar duplicados
+  for(let i = publishedJobs.length - 1; i >= 0; i--){
+    if(!publishedJobs[i].isSeed) publishedJobs.splice(i, 1);
+  }
+  // Etiquetas legibles para la compensación
+  const compLabels = {
+    salary: "Salario",
+    equity: "Acciones",
+    salary_equity: "Salario + acciones",
+    options: "Opciones sobre acciones"
+  };
+  rows.forEach(r => {
+    const u = r.users || {};
+    const sp = r.startup_profiles || {};
+    const company = u.name || "Startup";
+    const city = u.city || "Lima";
+    // La compensación puede venir como clave ("salary") o como etiqueta ("Salario")
+    const rawComp = r.compensation || r.comp || r.offer || "salary";
+    const compKey = compLabels[rawComp]
+      ? rawComp
+      : (Object.keys(compLabels).find(k => compLabels[k] === rawComp) || "salary");
+    publishedJobs.push({
+      id: r.id,
+      isSeed: false,
+      jobId: r.id,
+      title: r.title || r.role || "Puesto",
+      company: company,
+      companyInitials: company.split(" ").map(s => s[0]).filter(Boolean).slice(0,2).join("").toUpperCase(),
+      sector: r.sector || sp.sector || "",
+      city: city,
+      stage: r.stage || sp.stage || "",
+      offer: compLabels[compKey] || rawComp || "Salario",
+      comp: compKey,
+      modality: r.modality || "",
+      desc: r.description || r.desc || "",
+      personTypeText: r.person_type || r.person_type_text || r.personType || r.personTypeText || "",
+      status: "Publicado",
+      statusKey: "active"
     });
   });
   if(typeof renderDashboard === "function") renderDashboard();
@@ -4876,7 +5025,7 @@ async function logoutUser(){
   showHome();
 }
 function requireAuth(){if(!authState.isAuthenticated){openModal("login");return false}return true}
-function showAppDashboard(){if(!requireAuth())return;hideAll();setActiveNav("dashboard");$("appShell").classList.remove("hidden");$("appShell").classList.add("active");if(window.brigadaRefreshAllPublications)window.brigadaRefreshAllPublications();renderDashboard();scrollTo(0,0)}
+function showAppDashboard(){if(!requireAuth())return;hideAll();setActiveNav("dashboard");$("appShell").classList.remove("hidden");$("appShell").classList.add("active");if(window.brigadaRefreshAllPublications)window.brigadaRefreshAllPublications();if(window.brigadaRefreshAllJobs)window.brigadaRefreshAllJobs();renderDashboard();scrollTo(0,0)}
 function showAppDiscover(){if(!requireAuth())return;hideAll();setActiveNav("discover");$("discoverPage").classList.remove("hidden");$("discoverPage").classList.add("active");renderSubfilters();renderResults();scrollTo(0,0)}
 function showPartnersPage(){
   // [PARTNERS DESHABILITADO - Para reactivar en el futuro: borrar estas 2 líneas]
@@ -7378,7 +7527,6 @@ function showMyJobsPage(){
   setActiveNav("my-jobs");
   $("myJobsPage").classList.remove("hidden");
   $("myJobsPage").classList.add("active");
-  renderMyJobs();
 
   // FAB flotante "Publicar puesto" — visible solo para startups
   const u = authState.user;
@@ -7397,8 +7545,41 @@ function showMyJobsPage(){
   }
 
   scrollTo(0,0);
-}
 
+  // ✅ FASE 4: Cargar mis puestos desde Supabase
+  if(window.brigadaLoadMyJobs){
+    window.brigadaLoadMyJobs().then(rows => {
+      const u2 = authState.user || {};
+      // Limpiar puestos del usuario actual del array local
+      for(let i = startupPublishedJobs.length - 1; i >= 0; i--){
+        if(startupPublishedJobs[i].ownerName === u2.name) startupPublishedJobs.splice(i,1);
+      }
+      // Re-poblar con lo que dice Supabase
+      rows.forEach(r => {
+        const offer = r.compensation || "Salario";
+        startupPublishedJobs.unshift({
+          id: r.id,
+          isSeed: false,
+          ownerName: u2.name || "",
+          title: r.title || "",
+          meta: `Publicado · ${offer} · ${r.modality || "Remoto"}`,
+          desc: r.description || "",
+          offerRaw: offer,
+          modality: r.modality || "Remoto",
+          personTypeText: r.person_type || "",
+          stats: {interested:0, comments:0, saved:0, likes:0, helps:0},
+          status: r.status === "active" ? "Publicado" : (r.status || "Publicado"),
+          statusKey: r.status || "active",
+          interested: [],
+          comments: []
+        });
+      });
+      renderMyJobs();
+    });
+  } else {
+    renderMyJobs();
+  }
+}
 function showMyPublicationsPage(){
   if(!requireAuth())return;
   hideAll();
@@ -8154,7 +8335,6 @@ function submitJob(){
   const personTypeText = (personTypeInput && personTypeInput.value.trim()) || "";
 
   const u = authState.user || {};
-  // Mapeo de compensación visible a key interna
   const compKey = ({
     "Salario": "salary",
     "Acciones": "equity",
@@ -8164,11 +8344,10 @@ function submitJob(){
 
   const jobId = "job-" + Date.now();
 
-  // Datos para "Mis puestos" (vista de la startup)
   const newJob = {
     id: jobId,
     isSeed: false,
-    ownerName: u.name || "", // CRÍTICO: quién publicó este puesto, para filtrar correctamente
+    ownerName: u.name || "",
     title: title,
     meta: `Publicado · ${offer} · ${modality}`,
     desc: desc,
@@ -8183,7 +8362,6 @@ function submitJob(){
   };
   startupPublishedJobs.unshift(newJob);
 
-  // También al array global publishedJobs (visible para todos los talentos)
   publishedJobs.unshift({
     id: jobId,
     isSeed: false,
@@ -8203,8 +8381,27 @@ function submitJob(){
   });
 
   closeModal();
-  showToast(`Puesto "${title}" publicado.`);
+  showToast(`Publicando "${title}"...`);
   showMyJobsPage();
+
+  // ✅ FASE 4: Guardar también en Supabase
+  if(window.brigadaCreateJob){
+    window.brigadaCreateJob(newJob).then(res => {
+      if(res && res.ok){
+        const idx1 = startupPublishedJobs.findIndex(j => j.id === jobId);
+        if(idx1 >= 0) startupPublishedJobs[idx1].id = res.id;
+        const idx2 = publishedJobs.findIndex(j => j.id === jobId);
+        if(idx2 >= 0) publishedJobs[idx2].id = res.id;
+        showToast(`Puesto "${title}" publicado.`);
+      } else {
+        showToast("Se publicó local, pero hubo un problema en la nube: " + (res && res.error ? res.error : "desconocido"));
+        console.error("Error guardando puesto en Supabase:", res);
+      }
+      if(typeof renderMyJobs === "function") renderMyJobs();
+    });
+  } else {
+    showToast(`Puesto "${title}" publicado.`);
+  }
 }
 
 function updateJob(id){
