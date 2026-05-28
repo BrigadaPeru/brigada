@@ -4039,6 +4039,108 @@ body.user-talent .account-tab.personal-only{
     console.log("✅ Sesión restaurada:", profile);
     return { ok: true, user: profile };
   };
+
+  /**
+   * BRIGADA — Fase 4: Guardar perfil completo en Supabase.
+   * Escribe datos básicos en users + datos ricos en talent_profiles / startup_profiles.
+   */
+  window.brigadaSaveProfile = async function(u, answers) {
+    try {
+      const { data: { session } } = await window.brigadaSupabase.auth.getSession();
+      if (!session) return { ok: false, error: "No hay sesión activa." };
+      const uid = session.user.id;
+
+      const { error: userErr } = await window.brigadaSupabase
+        .from("users")
+        .update({
+          bio: u.bio || null,
+          profile_complete: true,
+          completion: 100
+        })
+        .eq("id", uid);
+      if (userErr) return { ok: false, error: "users: " + userErr.message };
+
+      if (u.type === "talent" || u.type === "partner") {
+        const row = {
+          user_id: uid,
+          first_name: (u.name || "").split(" ")[0] || null,
+          last_name: (u.name || "").split(" ").slice(1).join(" ") || null,
+          areas: (u.skills && u.skills.length) ? u.skills : null,
+          skills: (u.skills && u.skills.length) ? u.skills : null,
+          linkedin: u.linkedin || null,
+          motivation: answers.motivation || null,
+          experience: answers.experience || null,
+          problem_solved: answers.problemSolved || null,
+          life_goals: answers.lifeGoals || null
+        };
+        const { error: tErr } = await window.brigadaSupabase
+          .from("talent_profiles")
+          .upsert(row, { onConflict: "user_id" });
+        if (tErr) return { ok: false, error: "talent_profiles: " + tErr.message };
+      } else if (u.type === "startup" || u.type === "hire") {
+        const row = {
+          user_id: uid,
+          stage: answers.stage || null,
+          what_does: answers.whatDoes || null,
+          problem: answers.problem || null,
+          vision: answers.vision || null,
+          team_type: answers.teamType || null
+        };
+        const { error: sErr } = await window.brigadaSupabase
+          .from("startup_profiles")
+          .upsert(row, { onConflict: "user_id" });
+        if (sErr) return { ok: false, error: "startup_profiles: " + sErr.message };
+      }
+
+      console.log("✅ Perfil guardado en Supabase");
+      return { ok: true };
+    } catch (e) {
+      console.error("❌ brigadaSaveProfile excepción:", e);
+      return { ok: false, error: e.message };
+    }
+  };
+
+  /**
+   * BRIGADA — Fase 4: Cargar perfil rico (talent o startup) desde Supabase.
+   */
+  window.brigadaLoadProfileExtras = async function(userId, type) {
+    const extras = { skills: [], linkedin: "", profileAnswers: {} };
+    try {
+      if (type === "talent" || type === "partner") {
+        const { data, error } = await window.brigadaSupabase
+          .from("talent_profiles")
+          .select("*")
+          .eq("user_id", userId)
+          .maybeSingle();
+        if (error || !data) return extras;
+        extras.skills = data.skills || data.areas || [];
+        extras.linkedin = data.linkedin || "";
+        extras.profileAnswers = {
+          motivation: data.motivation || "",
+          experience: data.experience || "",
+          problemSolved: data.problem_solved || "",
+          lifeGoals: data.life_goals || ""
+        };
+      } else if (type === "startup" || type === "hire") {
+        const { data, error } = await window.brigadaSupabase
+          .from("startup_profiles")
+          .select("*")
+          .eq("user_id", userId)
+          .maybeSingle();
+        if (error || !data) return extras;
+        extras.profileAnswers = {
+          stage: data.stage || "",
+          whatDoes: data.what_does || "",
+          problem: data.problem || "",
+          vision: data.vision || "",
+          teamType: data.team_type || ""
+        };
+      }
+    } catch (e) {
+      console.error("❌ brigadaLoadProfileExtras excepción:", e);
+    }
+    return extras;
+  };
 /**
    * Maneja el clic en el botón "Entrar" del modal de login.
    * Lee los inputs, valida, llama a brigadaLogin, y si éxito muestra el dashboard.
@@ -5279,6 +5381,12 @@ function saveProfileComplete(){
     if(key) answers[key] = (ta.value || "").trim();
   });
 
+  // Capturar inputs de texto (linkedin) que también usan data-field
+  document.querySelectorAll(".profile-question-card input").forEach(inp => {
+    const key = inp.dataset.field;
+    if(key && key !== "bio") answers[key] = (inp.value || "").trim();
+  });
+
   // Capturar selects (etapa de startup)
   const stageSelect = document.querySelector(".profile-question-card .stage-select");
   if(stageSelect) answers.stage = stageSelect.value;
@@ -5297,7 +5405,7 @@ function saveProfileComplete(){
   const bioInput = document.getElementById("profileBioInput");
   if(bioInput) authState.user.bio = (bioInput.value || "").trim();
 
-  // Guardar respuestas
+  // Guardar respuestas en memoria (UI inmediata)
   authState.user.profileAnswers = answers;
   authState.user.profileComplete = true;
   authState.user.editingProfile = false;
@@ -5307,8 +5415,23 @@ function saveProfileComplete(){
   syncUserToSharedState(authState.user);
 
   if(typeof renderProfileSkillTags === "function") renderProfileSkillTags();
-  showToast("Perfil guardado.");
-  showMyProfile();
+
+  // ✅ FASE 4: Guardar también en Supabase (permanente)
+  if(window.brigadaSaveProfile){
+    showToast("Guardando perfil...");
+    window.brigadaSaveProfile(authState.user, answers).then(res => {
+      if(res && res.ok){
+        showToast("Perfil guardado.");
+      } else {
+        showToast("Se guardó local, pero hubo un problema en la nube: " + (res && res.error ? res.error : "desconocido"));
+        console.error("Error guardando en Supabase:", res);
+      }
+      showMyProfile();
+    });
+  } else {
+    showToast("Perfil guardado.");
+    showMyProfile();
+  }
 }
 function editProfile(){
   if(!authState.user)return;
@@ -8666,6 +8789,13 @@ window.closeModal = closeModal; window.setAuthUI = setAuthUI; window.showAppDash
         editingProfile: false,
         savedJobs: []
       };
+      // ✅ FASE 4: Cargar respuestas ricas del perfil desde Supabase
+      if(window.brigadaLoadProfileExtras){
+        const extras = await window.brigadaLoadProfileExtras(p.id, authState.user.type);
+        if(extras.skills && extras.skills.length) authState.user.skills = extras.skills;
+        if(extras.linkedin) authState.user.linkedin = extras.linkedin;
+        if(extras.profileAnswers) authState.user.profileAnswers = extras.profileAnswers;
+      }
       setAuthUI();
       showAppDashboard();
       return;
