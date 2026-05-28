@@ -4688,6 +4688,46 @@ window.brigadaRefreshAllJobs = async function(){
   });
   if(typeof renderDashboard === "function") renderDashboard();
 };
+
+  // ✅ FASE 4: Crear una solicitud "Quiero conversar" en Supabase
+window.brigadaCreateApplication = async function(targetType, targetId, message){
+  try {
+    const { data: { session } } = await window.brigadaSupabase.auth.getSession();
+    if(!session) return { ok: false, error: "No hay sesión activa." };
+    const fromId = session.user.id;
+
+    // Averiguar a quién pertenece el puesto o la publicación (el destinatario)
+    const table = (targetType === "job") ? "jobs" : "publications";
+    const { data: target, error: targetErr } = await window.brigadaSupabase
+      .from(table)
+      .select("user_id")
+      .eq("id", targetId)
+      .single();
+    if(targetErr || !target) return { ok: false, error: "No se encontró el destino." };
+    const toId = target.user_id;
+    if(toId === fromId) return { ok: false, error: "No puedes enviarte una solicitud a ti mismo." };
+
+    const row = {
+      from_user_id: fromId,
+      to_user_id: toId,
+      target_type: targetType,
+      target_id: targetId,
+      message: message || null,
+      status: "pending"
+    };
+    const { data, error } = await window.brigadaSupabase
+      .from("applications")
+      .insert(row)
+      .select()
+      .single();
+    if(error) return { ok: false, error: "applications insert: " + error.message };
+    console.log("✅ Solicitud creada en Supabase:", data.id);
+    return { ok: true, id: data.id };
+  } catch (e) {
+    console.error("❌ brigadaCreateApplication excepción:", e);
+    return { ok: false, error: e.message };
+  }
+};
 function convertPublicationToOpportunity(pub){
   // Convierte una publicación del talento al formato esperado por el dashboard.
   // CRÍTICO: usa los datos del AUTOR guardados DENTRO de la publicación (pub.author),
@@ -8947,6 +8987,14 @@ document.addEventListener("click",function(e){
       status: "pending"
     };
     window._sharedState.sharedRequests.push(request);
+
+    // ✅ FASE 4: guardar la solicitud en Supabase (real, no solo en memoria)
+if(window.brigadaCreateApplication && targetOpp && targetOpp.id){
+  const appTargetType = targetIsPerson ? "publication" : "job";
+  window.brigadaCreateApplication(appTargetType, targetOpp.id, msg).then(res => {
+    if(!res.ok) console.error("No se pudo guardar la solicitud en Supabase:", res.error);
+  });
+}
 
     // Si soy TALENTO y le escribo a una STARTUP, también guardo la postulación
     // en Mis postulaciones (con vínculo al requestId para sincronizar estado después)
