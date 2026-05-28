@@ -3903,10 +3903,195 @@ body.user-talent .account-tab.personal-only{
 <footer><div class="foot"><div>© 2026 <span class="brigada-mark">Brigada</span> · Hecho en Perú 🇵🇪</div><div><a href="#">Términos</a> · <a href="#">Privacidad</a> · <a href="mailto:hola@brigada.com.pe">hola@brigada.com.pe</a></div></div></footer>
 <div class="modal-bg" id="modalBg"><div class="modal" id="modalContent"></div></div>
 
+<!-- ============================================ -->
+<!-- BRIGADA — Conexión con Supabase (Fase 1)    -->
+<!-- ============================================ -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+  const SUPABASE_URL = "https://lzvliydopsrmwpsriemg.supabase.co";
+  const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_XRydRjYYbkhlUjuBr7tFKg_AVIwx_k_";
+
+  window.brigadaSupabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
+  console.log("✅ Brigada: cliente Supabase listo →", window.brigadaSupabase ? "OK" : "ERROR");
+
+// ============================================
+  // FUNCIONES DE AUTH REAL (Fase 2 — Brigada)
+  // ============================================
+
+  /**
+   * Registra un nuevo usuario en Supabase Auth + crea fila en tabla public.users.
+   * @param {string} email - correo del usuario
+   * @param {string} password - contraseña (mínimo 6 caracteres)
+   * @param {string} type - "talent" | "startup" | "hire" | "partner"
+   * @param {string} name - nombre completo o de empresa
+   * @returns {Promise<{ok: boolean, user?: object, error?: string}>}
+   */
+  window.brigadaSignup = async function(email, password, type, name) {
+    try {
+      // 1) Registrar en Supabase Auth
+      const { data: authData, error: authError } = await window.brigadaSupabase.auth.signUp({
+        email: email,
+        password: password
+      });
+      if (authError) {
+        console.error("❌ Signup Auth error:", authError);
+        return { ok: false, error: authError.message };
+      }
+      if (!authData.user) {
+        return { ok: false, error: "No se pudo crear el usuario en Auth." };
+      }
+
+      // 2) Insertar fila en tabla public.users con datos de negocio
+      const { data: profileData, error: profileError } = await window.brigadaSupabase
+        .from("users")
+        .insert({
+          id: authData.user.id,
+          email: email,
+          name: name,
+          type: type,
+          profile_complete: false,
+          completion: 10
+        })
+        .select()
+        .single();
+
+      if (profileError) {
+        console.error("❌ Signup Profile error:", profileError);
+        return { ok: false, error: "Cuenta creada en Auth pero falló al guardar perfil: " + profileError.message };
+      }
+
+      console.log("✅ Signup completo:", profileData);
+      return { ok: true, user: profileData };
+    } catch (e) {
+      console.error("❌ Signup excepción:", e);
+      return { ok: false, error: e.message };
+    }
+  };
+
+  /**
+   * Inicia sesión con email + password.
+   * Tras login exitoso, carga el perfil completo desde public.users.
+   */
+  window.brigadaLogin = async function(email, password) {
+    try {
+      const { data, error } = await window.brigadaSupabase.auth.signInWithPassword({
+        email: email,
+        password: password
+      });
+      if (error) {
+        console.error("❌ Login error:", error);
+        return { ok: false, error: error.message };
+      }
+
+      // Cargar perfil desde tabla users
+      const { data: profile, error: profileError } = await window.brigadaSupabase
+        .from("users")
+        .select("*")
+        .eq("id", data.user.id)
+        .single();
+
+      if (profileError) {
+        console.error("❌ Login profile fetch error:", profileError);
+        return { ok: false, error: "Sesión iniciada pero no se pudo cargar el perfil." };
+      }
+
+      console.log("✅ Login completo:", profile);
+      return { ok: true, user: profile };
+    } catch (e) {
+      console.error("❌ Login excepción:", e);
+      return { ok: false, error: e.message };
+    }
+  };
+
+  /**
+   * Cierra la sesión actual.
+   */
+  window.brigadaLogout = async function() {
+    const { error } = await window.brigadaSupabase.auth.signOut();
+    if (error) {
+      console.error("❌ Logout error:", error);
+      return { ok: false, error: error.message };
+    }
+    console.log("✅ Sesión cerrada");
+    return { ok: true };
+  };
+
+  /**
+   * Al cargar la página, revisa si ya hay sesión activa.
+   * Si la hay, devuelve el perfil del usuario.
+   */
+  window.brigadaCheckSession = async function() {
+    const { data: { session } } = await window.brigadaSupabase.auth.getSession();
+    if (!session) {
+      console.log("ℹ️ Sin sesión activa");
+      return { ok: false };
+    }
+    const { data: profile, error } = await window.brigadaSupabase
+      .from("users")
+      .select("*")
+      .eq("id", session.user.id)
+      .single();
+    if (error) {
+      console.error("❌ CheckSession profile error:", error);
+      return { ok: false, error: error.message };
+    }
+    console.log("✅ Sesión restaurada:", profile);
+    return { ok: true, user: profile };
+  };
+/**
+   * Maneja el clic en el botón "Entrar" del modal de login.
+   * Lee los inputs, valida, llama a brigadaLogin, y si éxito muestra el dashboard.
+   */
+window.handleLogin = async function(){
+    const toast = window.showToast || function(msg){ console.log("📢", msg); alert(msg); };
+    const emailInput = document.getElementById("loginEmailInput");
+    const passwordInput = document.getElementById("loginPasswordInput");
+    const email = (emailInput?.value || "").trim();
+    const password = (passwordInput?.value || "").trim();
+    if(!email || !password){
+      toast("Ingresa tu correo y contraseña.");
+      return;
+    }
+    toast("Iniciando sesión...");
+    const result = await window.brigadaLogin(email, password);
+    if(!result.ok){
+      toast("Error: " + (result.error || "no se pudo iniciar sesión."));
+      return;
+    }
+    // ✅ Login exitoso. Hidratamos window.authState con el perfil de la base
+    const p = result.user;
+    if(!window.authState){
+      toast("Error interno: authState no está disponible.");
+      return;
+    }
+    window.authState.isAuthenticated = true;
+    window.authState.user = {
+      id: p.id,
+      email: p.email,
+      firstName: (p.name || "Usuario").split(" ")[0],
+      name: p.name || "Usuario",
+      roleLabel: p.type === "talent" ? "Cuenta personal" : (p.type === "startup" || p.type === "hire") ? "Cuenta de startup" : "Cuenta Brigada",
+      type: p.type || "talent",
+      city: p.city || "",
+      country: p.country || "",
+      bio: p.bio || "",
+      completion: p.completion || 30, profileComplete: !!p.profile_complete,
+      editingProfile: false,
+      savedJobs: []
+    };
+    if(window.closeModal) window.closeModal();
+    if(window.setAuthUI) window.setAuthUI();
+    if(window.showAppDashboard) window.showAppDashboard();
+  };
+</script>
+<!-- ============================================ -->
+
 <script>
 (function(){
 const $=id=>document.getElementById(id);
 const authState={isAuthenticated:false,user:null};
+window.authState = authState;
 
 // Sectores disponibles para startups (Paso 1: onboarding + perfil)
 const STARTUP_SECTORS = [
@@ -4416,7 +4601,17 @@ function simulateAuth(type="talent"){
  if(type==="partner")user={firstName:"Partner",name:"Partner en revisión",roleLabel:"Partner postulado",type:"partner",completion:20,profileComplete:false,editingProfile:false};
  authState.isAuthenticated=true;authState.user=user;closeModal();setAuthUI();showAppDashboard()
 }
-function logoutUser(){authState.isAuthenticated=false;authState.user=null;setAuthUI();showHome()}
+async function logoutUser(){
+  try {
+    if(window.brigadaLogout) await window.brigadaLogout();
+  } catch(e) {
+    console.error("Error en logout:", e);
+  }
+  authState.isAuthenticated = false;
+  authState.user = null;
+  setAuthUI();
+  showHome();
+}
 function requireAuth(){if(!authState.isAuthenticated){openModal("login");return false}return true}
 function showAppDashboard(){if(!requireAuth())return;hideAll();setActiveNav("dashboard");$("appShell").classList.remove("hidden");$("appShell").classList.add("active");renderDashboard();scrollTo(0,0)}
 function showAppDiscover(){if(!requireAuth())return;hideAll();setActiveNav("discover");$("discoverPage").classList.remove("hidden");$("discoverPage").classList.add("active");renderSubfilters();renderResults();scrollTo(0,0)}
@@ -7428,6 +7623,10 @@ function showRegisterCodeStep(type){
   const emailInput = document.getElementById("registerEmailInput");
   const email = (emailInput && emailInput.value ? emailInput.value : "").trim();
   const safeEmail = email || "tu correo electrónico";
+// BRIGADA: guardar el correo en el draft de registro (sólo si vino con valor)
+  if(!window.brigadaRegisterDraft) window.brigadaRegisterDraft = {};
+  if(email){ window.brigadaRegisterDraft.email = email; }
+  window.brigadaRegisterDraft.type = type;
   const accountForm = document.getElementById("accountForm");
   if(!accountForm){
     showToast("No se encontró el formulario de registro.");
@@ -7435,12 +7634,12 @@ function showRegisterCodeStep(type){
   }
 
   accountForm.innerHTML = `<div class="form-section">
-    <div class="form-title">Código de validación</div>
-    <p>Escribe el código que enviamos a <strong>${safeEmail}</strong>.</p>
+    <div class="form-title">Crea tu contraseña</div>
+    <p>Vamos a crear tu cuenta con <strong>${safeEmail}</strong>. Elige una contraseña segura.</p>
     <div class="form-grid">
       <div class="field-full">
-        <div class="field-label">Código de 6 números</div>
-        <input id="registerCodeInput" inputmode="numeric" maxlength="6" placeholder="Ej: 000000">
+        <div class="field-label">Contraseña (mínimo 6 caracteres)</div>
+        <input id="registerPasswordInput" type="password" minlength="6" placeholder="••••••••">
       </div>
     </div>
     <button class="btn" style="width:100%" data-action="validate-register-code" data-type="${type}">Continuar</button>
@@ -7454,13 +7653,25 @@ function showRegisterCodeStep(type){
 }
 
 function validateRegisterCode(type){
-  const codeInput = document.getElementById("registerCodeInput");
-  const code = (codeInput && codeInput.value ? codeInput.value : "").trim();
+  const passwordInput = document.getElementById("registerPasswordInput");
+  const password = (passwordInput && passwordInput.value ? passwordInput.value : "").trim();
 
-  if(!code){
-    showToast("Escribe el código de 6 números. En esta demo puedes usar 000000.");
+  if(!password){
+    showToast("Escribe una contraseña para tu cuenta.");
     return;
   }
+  if(password.length < 6){
+    showToast("La contraseña debe tener al menos 6 caracteres.");
+    return;
+  }
+
+  // Guardamos la contraseña en memoria temporalmente, junto con el correo,
+  // para usarla cuando el usuario complete los datos básicos y le dé a "Entrar a Brigada".
+  window.brigadaRegisterDraft = {
+    type: type,
+    email: (document.getElementById("registerEmailInput") || {}).value || window.brigadaRegisterDraft?.email || "",
+    password: password
+  };
 
   showMinimalOnboarding(type);
 }
@@ -7931,7 +8142,7 @@ function createStartupSubmit(){
   showAppDashboard();
 }
 
-function finalizeOnboarding(type){
+async function finalizeOnboarding(type){
   // ===== STARTUP: capturar nombre, ciudad, país, bio, sector =====
   if(type === "hire" || type === "startup"){
     const startupName = (document.getElementById("reg_startupName")?.value || "").trim();
@@ -7954,9 +8165,26 @@ function finalizeOnboarding(type){
       return;
     }
 
+    // 🆕 BRIGADA: crear cuenta REAL en Supabase
+    const draft = window.brigadaRegisterDraft || {};
+    if(!draft.email || !draft.password){
+      showToast("Falta el correo o la contraseña. Por favor reinicia el registro.");
+      return;
+    }
+
+    showToast("Creando tu cuenta...");
+    const result = await window.brigadaSignup(draft.email, draft.password, "startup", startupName);
+    if(!result.ok){
+      showToast("Error: " + (result.error || "no se pudo crear la cuenta."));
+      return;
+    }
+
+    // ✅ Cuenta creada. Construir authState.user con datos REALES de Supabase + datos del formulario
     const firstName = startupName.split(" ")[0] || "Startup";
     authState.isAuthenticated = true;
     authState.user = {
+      id: result.user.id,
+      email: result.user.email,
       firstName: firstName,
       name: startupName,
       roleLabel: "Cuenta de startup",
@@ -7970,6 +8198,7 @@ function finalizeOnboarding(type){
       editingProfile: false,
       profileAnswers: {}
     };
+    delete window.brigadaRegisterDraft;
     closeModal();
     setAuthUI();
     showAppDashboard();
@@ -8015,8 +8244,25 @@ function finalizeOnboarding(type){
 
   const fullName = (firstName + " " + lastName).trim() || "Usuario";
 
+  // 🆕 BRIGADA: crear cuenta REAL en Supabase
+  const draft = window.brigadaRegisterDraft || {};
+  if(!draft.email || !draft.password){
+    showToast("Falta el correo o la contraseña. Por favor reinicia el registro.");
+    return;
+  }
+
+  showToast("Creando tu cuenta...");
+  const result = await window.brigadaSignup(draft.email, draft.password, "talent", fullName);
+  if(!result.ok){
+    showToast("Error: " + (result.error || "no se pudo crear la cuenta."));
+    return;
+  }
+
+  // ✅ Cuenta creada. Construir authState.user con datos REALES de Supabase + datos del formulario
   authState.isAuthenticated = true;
   authState.user = {
+    id: result.user.id,
+    email: result.user.email,
     firstName: firstName || "Usuario",
     name: fullName,
     roleLabel: "Cuenta personal",
@@ -8030,13 +8276,14 @@ function finalizeOnboarding(type){
     editingProfile: false,
     savedJobs: []
   };
+  delete window.brigadaRegisterDraft;
   closeModal();
   setAuthUI();
   showAppDashboard();
 }
 
 const modalTemplates={
-login:`<button class="modal-close" data-action="close-modal">×</button><h3>Iniciar sesión</h3><div class="modal-sub">Accede a tu cuenta de <span class="brigada-mark">Brigada</span>.</div><input type="email" placeholder="tu@correo.pe"><button class="btn" style="width:100%" data-action="auth" data-type="talent">Entrar</button>`,
+login:`<button class="modal-close" data-action="close-modal">×</button><h3>Iniciar sesión</h3><div class="modal-sub">Accede a tu cuenta de <span class="brigada-mark">Brigada</span>.</div><div class="form-section"><div class="form-grid"><div class="field-full"><div class="field-label">Correo electrónico</div><input id="loginEmailInput" type="email" placeholder="tu@correo.com"></div><div class="field-full"><div class="field-label">Contraseña</div><input id="loginPasswordInput" type="password" placeholder="••••••••"></div></div><button class="btn" style="width:100%;margin-top:8px" data-action="do-login">Entrar</button></div>`,
 register:`<button class="modal-close" data-action="close-modal">×</button><h3>Crear cuenta</h3><div class="modal-sub">Elige una opción y empieza con tu correo.</div><div class="account-picker"><button class="account-option" data-account-type="talent" data-action="choose-account"><strong>Quiero unirme a una start up</strong><span>Para personas que quieren sumarse a una startup.</span></button><button class="account-option" data-account-type="startup" data-action="choose-account"><strong>Tengo una startup</strong><span>Para founders que quieren reclutar talento, contar avances y pedir feedback.</span></button></div><div id="accountForm"></div><p class="modal-note">En el futuro habrá una opción específica para inversionistas.</p>`,
 partner:`<button class="modal-close" data-action="close-modal">×</button><h3>Quiero ser partner y ofrecer mis servicios</h3><div class="modal-sub">Servicios jurídicos, contables, M&A, tecnológicos, financieros o de talento.</div><div class="form-section" id="partnerForm"><div class="form-title">Paso 1: valida tu correo</div><div class="form-grid"><div><div class="field-label">Correo</div><input type="email" placeholder="correo@empresa.com"></div><div><div class="field-label">Código</div><input placeholder="Ej: 482913"></div></div><button class="btn soft" style="width:100%;margin-bottom:10px" data-action="fake" data-message="Código enviado en modo demo.">Enviar código</button><button class="btn" style="width:100%" data-action="minimal-partner">Validar y continuar</button></div>`
 };
@@ -8317,6 +8564,7 @@ document.addEventListener("click",function(e){
   else if(a==="finalize-onboarding") {
     finalizeOnboarding(btn.dataset.type);
   }
+else if(a==="do-login") window.handleLogin();
   else if(a==="auth") simulateAuth(btn.dataset.type);
   else if(a==="choose-account") setAccountType(btn.dataset.accountType);
   else if(a==="send-register-code") showRegisterCodeStep(btn.dataset.type);
@@ -8396,7 +8644,36 @@ document.addEventListener("click", function(e){
   }
 });
 
-setAuthUI();showHome();
+window.closeModal = closeModal; window.setAuthUI = setAuthUI; window.showAppDashboard = showAppDashboard;
+(async function(){
+  if(window.brigadaCheckSession){
+    const session = await window.brigadaCheckSession();
+    if(session.ok && session.user){
+      const p = session.user;
+      authState.isAuthenticated = true;
+      authState.user = {
+        id: p.id,
+        email: p.email,
+        firstName: (p.name || "Usuario").split(" ")[0],
+        name: p.name || "Usuario",
+        roleLabel: p.type === "talent" ? "Cuenta personal" : (p.type === "startup" || p.type === "hire") ? "Cuenta de startup" : "Cuenta Brigada",
+        type: p.type || "talent",
+        city: p.city || "",
+        country: p.country || "",
+        bio: p.bio || "",
+        completion: p.completion || 30,
+        profileComplete: !!p.profile_complete,
+        editingProfile: false,
+        savedJobs: []
+      };
+      setAuthUI();
+      showAppDashboard();
+      return;
+    }
+  }
+  setAuthUI();
+  showHome();
+})();
 })();
 </script>
 </body>
