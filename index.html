@@ -4141,6 +4141,103 @@ body.user-talent .account-tab.personal-only{
     }
     return extras;
   };
+
+  /**
+   * BRIGADA — Fase 4: Publicaciones de talento en Supabase.
+   * Crear, listar y eliminar publicaciones.
+   */
+  window.brigadaCreatePublication = async function(pub) {
+    try {
+      const { data: { session } } = await window.brigadaSupabase.auth.getSession();
+      if (!session) return { ok: false, error: "No hay sesión activa." };
+      const uid = session.user.id;
+
+      const row = {
+        user_id: uid,
+        role: pub.role || null,
+        compensation: pub.comp || null,
+        availability: pub.availability || null,
+        description: pub.description || null,
+        status: pub.status || "active"
+      };
+      const { data, error } = await window.brigadaSupabase
+        .from("publications")
+        .insert(row)
+        .select()
+        .single();
+      if (error) return { ok: false, error: "publications insert: " + error.message };
+      console.log("✅ Publicación creada en Supabase:", data.id);
+      return { ok: true, id: data.id, created_at: data.created_at };
+    } catch (e) {
+      console.error("❌ brigadaCreatePublication excepción:", e);
+      return { ok: false, error: e.message };
+    }
+  };
+
+  window.brigadaLoadMyPublications = async function() {
+    try {
+      const { data: { session } } = await window.brigadaSupabase.auth.getSession();
+      if (!session) return [];
+      const uid = session.user.id;
+      const { data, error } = await window.brigadaSupabase
+        .from("publications")
+        .select("*")
+        .eq("user_id", uid)
+        .order("created_at", { ascending: false });
+      if (error){ console.error("Error cargando mis publicaciones:", error); return []; }
+      return data || [];
+    } catch (e) {
+      console.error("❌ brigadaLoadMyPublications excepción:", e);
+      return [];
+    }
+  };
+
+  window.brigadaLoadAllActivePublications = async function() {
+    try {
+      const { data, error } = await window.brigadaSupabase
+        .from("publications")
+        .select("*, users:user_id(id,name,city,country,bio), talent_profiles:user_id(skills,areas,linkedin,motivation,experience,problem_solved,life_goals)")
+        .eq("status", "active")
+        .order("created_at", { ascending: false });
+      if (error){ console.error("Error cargando publicaciones activas:", error); return []; }
+      return data || [];
+    } catch (e) {
+      console.error("❌ brigadaLoadAllActivePublications excepción:", e);
+      return [];
+    }
+  };
+
+  window.brigadaDeletePublication = async function(pubId) {
+    try {
+      const { error } = await window.brigadaSupabase
+        .from("publications")
+        .delete()
+        .eq("id", pubId);
+      if (error) return { ok: false, error: "publications delete: " + error.message };
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
+
+  window.brigadaUpdatePublication = async function(pubId, updates) {
+    try {
+      const row = {};
+      if(updates.role !== undefined) row.role = updates.role;
+      if(updates.comp !== undefined) row.compensation = updates.comp;
+      if(updates.availability !== undefined) row.availability = updates.availability;
+      if(updates.description !== undefined) row.description = updates.description;
+      if(updates.status !== undefined) row.status = updates.status;
+      const { error } = await window.brigadaSupabase
+        .from("publications")
+        .update(row)
+        .eq("id", pubId);
+      if (error) return { ok: false, error: "publications update: " + error.message };
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  };
 /**
    * Maneja el clic en el botón "Entrar" del modal de login.
    * Lee los inputs, valida, llama a brigadaLogin, y si éxito muestra el dashboard.
@@ -4378,6 +4475,44 @@ function getSharedTalent(){
   // Sin sesión (landing pública): mostramos seeds para que se vea cómo es el producto
   return all;
 }
+
+  // ✅ FASE 4: Cargar TODAS las publicaciones activas desde Supabase
+window.brigadaRefreshAllPublications = async function(){
+  if(!window.brigadaLoadAllActivePublications) return;
+  const rows = await window.brigadaLoadAllActivePublications();
+  // Limpiar TODO el array para evitar duplicados
+  talentPublications.length = 0;
+  rows.forEach(r => {
+    const profile = r.users || {};
+    const tp = r.talent_profiles || {};
+    const fullName = profile.name || "Persona";
+    const parts = fullName.split(" ");
+    talentPublications.push({
+      id: r.id,
+      publicationId: r.id,
+      role: r.role,
+      comp: r.compensation,
+      availability: r.availability,
+      description: r.description,
+      status: r.status,
+      createdAt: r.created_at,
+      author: {
+        firstName: parts[0] || "Persona",
+        lastName: parts.slice(1).join(" ") || "",
+        name: fullName,
+        city: profile.city || "Lima",
+        skills: tp.skills || tp.areas || [],
+        bio: profile.bio || "",
+        linkedin: tp.linkedin || "",
+        experience: tp.experience || "",
+        motivation: tp.motivation || "",
+        problemSolved: tp.problem_solved || "",
+        lifeGoals: tp.life_goals || ""
+      }
+    });
+  });
+  if(typeof renderDashboard === "function") renderDashboard();
+};
 function convertPublicationToOpportunity(pub){
   // Convierte una publicación del talento al formato esperado por el dashboard.
   // CRÍTICO: usa los datos del AUTOR guardados DENTRO de la publicación (pub.author),
@@ -4715,7 +4850,7 @@ async function logoutUser(){
   showHome();
 }
 function requireAuth(){if(!authState.isAuthenticated){openModal("login");return false}return true}
-function showAppDashboard(){if(!requireAuth())return;hideAll();setActiveNav("dashboard");$("appShell").classList.remove("hidden");$("appShell").classList.add("active");renderDashboard();scrollTo(0,0)}
+function showAppDashboard(){if(!requireAuth())return;hideAll();setActiveNav("dashboard");$("appShell").classList.remove("hidden");$("appShell").classList.add("active");if(window.brigadaRefreshAllPublications)window.brigadaRefreshAllPublications();renderDashboard();scrollTo(0,0)}
 function showAppDiscover(){if(!requireAuth())return;hideAll();setActiveNav("discover");$("discoverPage").classList.remove("hidden");$("discoverPage").classList.add("active");renderSubfilters();renderResults();scrollTo(0,0)}
 function showPartnersPage(){
   // [PARTNERS DESHABILITADO - Para reactivar en el futuro: borrar estas 2 líneas]
@@ -7244,7 +7379,6 @@ function showMyPublicationsPage(){
   setActiveNav("my-publications");
   $("myPublicationsPage").classList.remove("hidden");
   $("myPublicationsPage").classList.add("active");
-  renderMyPublications();
 
   // FAB flotante "Publicar que busco unirme" — solo para talento
   const u = authState.user;
@@ -7262,6 +7396,48 @@ function showMyPublicationsPage(){
   }
 
   scrollTo(0,0);
+
+  // ✅ FASE 4: Cargar mis publicaciones desde Supabase
+  if(window.brigadaLoadMyPublications){
+    window.brigadaLoadMyPublications().then(rows => {
+      const u2 = authState.user || {};
+      const profileAnswers = u2.profileAnswers || {};
+      // Limpiar publicaciones del usuario actual del array local
+      for(let i = talentPublications.length - 1; i >= 0; i--){
+        const a = talentPublications[i].author;
+        if(a && a.name === u2.name) talentPublications.splice(i,1);
+      }
+      // Re-poblar con lo que dice Supabase
+      rows.forEach(r => {
+        talentPublications.push({
+          id: r.id,
+          publicationId: r.id,
+          role: r.role,
+          comp: r.compensation,
+          availability: r.availability,
+          description: r.description,
+          status: r.status,
+          createdAt: r.created_at,
+          author: {
+            firstName: u2.firstName || (u2.name && u2.name.split(" ")[0]) || "Persona",
+            lastName: u2.lastName || "",
+            name: u2.name || "Persona",
+            city: u2.city || "Lima",
+            skills: u2.skills || [],
+            bio: u2.bio || "",
+            linkedin: u2.linkedin || "",
+            experience: profileAnswers.experience || "",
+            motivation: profileAnswers.motivation || "",
+            problemSolved: profileAnswers.problemSolved || "",
+            lifeGoals: profileAnswers.lifeGoals || ""
+          }
+        });
+      });
+      renderMyPublications();
+    });
+  } else {
+    renderMyPublications();
+  }
 }
 
 function renderMyPublications(){
@@ -8149,8 +8325,6 @@ function submitPublication(){
     description: description,
     status: "active",
     createdAt: new Date().toISOString(),
-    // Guardar datos del autor DENTRO de la publicación, para que se vea correctamente
-    // sin importar quién esté logueado al momento de visualizar
     author: {
       firstName: u.firstName || (u.name && u.name.split(" ")[0]) || "Persona",
       lastName: u.lastName || (u.name && u.name.split(" ").slice(-1)[0]) || "",
@@ -8168,10 +8342,29 @@ function submitPublication(){
 
   talentPublications.unshift(newPub);
   closeModal();
-  showToast("Publicación creada. Las startups ya pueden verla.");
-  // Refrescar vistas
+  showToast("Publicando...");
   if(typeof renderDashboard === "function") renderDashboard();
   if(typeof renderMyPublications === "function") renderMyPublications();
+
+  // ✅ FASE 4: Guardar también en Supabase
+  if(window.brigadaCreatePublication){
+    window.brigadaCreatePublication(newPub).then(res => {
+      if(res && res.ok){
+        const idx = talentPublications.findIndex(p => p.id === newPub.id);
+        if(idx >= 0){
+          talentPublications[idx].id = res.id;
+          talentPublications[idx].publicationId = res.id;
+        }
+        showToast("Publicación creada. Las startups ya pueden verla.");
+      } else {
+        showToast("Se publicó local, pero hubo un problema en la nube: " + (res && res.error ? res.error : "desconocido"));
+        console.error("Error guardando publicación en Supabase:", res);
+      }
+      if(typeof renderMyPublications === "function") renderMyPublications();
+    });
+  } else {
+    showToast("Publicación creada. Las startups ya pueden verla.");
+  }
 }
 
 function updatePublication(id){
