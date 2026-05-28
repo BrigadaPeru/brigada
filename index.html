@@ -4196,7 +4196,7 @@ body.user-talent .account-tab.personal-only{
     try {
       const { data, error } = await window.brigadaSupabase
         .from("publications")
-        .select("*, users:user_id(id,name,city,country,bio), talent_profiles:user_id(skills,areas,linkedin,motivation,experience,problem_solved,life_goals)")
+        .select("id,role,compensation,availability,description,status,created_at,user_id,users!publications_user_id_fkey(name,city,country,bio),talent_profiles!talent_profiles_user_id_fkey(skills,areas,linkedin,motivation,experience,problem_solved,life_goals)(skills,areas,linkedin,motivation,experience,problem_solved,life_goals)")
         .eq("status", "active")
         .order("created_at", { ascending: false });
       if (error){ console.error("Error cargando publicaciones activas:", error); return []; }
