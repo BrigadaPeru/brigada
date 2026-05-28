@@ -4781,7 +4781,7 @@ function convertJobToOpportunity(job){
     stage: job.stage || "",
     modality: job.modality || "",
     personType: job.personTypeText || "",
-    functions: job.desc || ""
+    functions: job.desc ? [job.desc] : []
   };
 }
 function getSharedRequests(){ return window._sharedState.sharedRequests; }
