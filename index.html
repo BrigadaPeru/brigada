@@ -4194,13 +4194,39 @@ body.user-talent .account-tab.personal-only{
 
   window.brigadaLoadAllActivePublications = async function() {
     try {
-      const { data, error } = await window.brigadaSupabase
+      // Query 1: publicaciones activas
+      const { data: pubs, error: pubErr } = await window.brigadaSupabase
         .from("publications")
-        .select("id,role,compensation,availability,description,status,created_at,user_id,users!publications_user_id_fkey(name,city,country,bio),talent_profiles!talent_profiles_user_id_fkey(skills,areas,linkedin,motivation,experience,problem_solved,life_goals)(skills,areas,linkedin,motivation,experience,problem_solved,life_goals)")
+        .select("*")
         .eq("status", "active")
         .order("created_at", { ascending: false });
-      if (error){ console.error("Error cargando publicaciones activas:", error); return []; }
-      return data || [];
+      if (pubErr){ console.error("Error cargando publicaciones activas:", pubErr); return []; }
+      if (!pubs || !pubs.length) return [];
+
+      // Query 2: datos de los users de esas publicaciones
+      const userIds = [...new Set(pubs.map(p => p.user_id).filter(Boolean))];
+      const usersById = {};
+      const profilesById = {};
+      if (userIds.length){
+        const { data: users } = await window.brigadaSupabase
+          .from("users")
+          .select("id,name,city,country,bio,type")
+          .in("id", userIds);
+        (users || []).forEach(u => { usersById[u.id] = u; });
+
+        const { data: profiles } = await window.brigadaSupabase
+          .from("talent_profiles")
+          .select("user_id,skills,areas,linkedin,motivation,experience,problem_solved,life_goals")
+          .in("user_id", userIds);
+        (profiles || []).forEach(p => { profilesById[p.user_id] = p; });
+      }
+
+      // Combinar
+      return pubs.map(p => ({
+        ...p,
+        users: usersById[p.user_id] || null,
+        talent_profiles: profilesById[p.user_id] || null
+      }));
     } catch (e) {
       console.error("❌ brigadaLoadAllActivePublications excepción:", e);
       return [];
