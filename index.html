@@ -4925,6 +4925,87 @@ window.brigadaRefreshMyApplications = async function(){
 
   if(typeof renderMyApplications === "function") renderMyApplications();
 };
+
+  // ✅ FASE 5: CHAT — encontrar o crear la conversación de una solicitud
+window.brigadaGetConversationId = async function(applicationId){
+  try {
+    if(!applicationId) return null;
+    const { data: existing } = await window.brigadaSupabase
+      .from("conversations")
+      .select("id")
+      .eq("application_id", applicationId)
+      .limit(1);
+    if(existing && existing.length) return existing[0].id;
+
+    // No existe: crearla con los dos usuarios de la solicitud
+    const { data: app } = await window.brigadaSupabase
+      .from("applications")
+      .select("from_user_id,to_user_id,message")
+      .eq("id", applicationId)
+      .single();
+    if(!app) return null;
+    const { data: created, error } = await window.brigadaSupabase
+      .from("conversations")
+      .insert({ user1_id: app.from_user_id, user2_id: app.to_user_id, application_id: applicationId, last_message: app.message || "", last_message_at: new Date().toISOString() })
+      .select("id")
+      .single();
+    if(error){ console.error("crear conversación:", error.message); return null; }
+    // Sembrar el mensaje inicial (el "Quiero conversar") como primer mensaje
+    if(app.message){
+      await window.brigadaSupabase
+        .from("messages")
+        .insert({ conversation_id: created.id, from_user_id: app.from_user_id, content: app.message, read: false });
+    }
+    return created.id;
+  } catch(e){ console.error("❌ brigadaGetConversationId:", e); return null; }
+};
+
+// ✅ FASE 5: CHAT — enviar un mensaje
+window.brigadaSendMessage = async function(applicationId, content){
+  try {
+    const { data: { session } } = await window.brigadaSupabase.auth.getSession();
+    if(!session) return { ok:false, error:"No hay sesión." };
+    const myId = session.user.id;
+    const convId = await window.brigadaGetConversationId(applicationId);
+    if(!convId) return { ok:false, error:"No se pudo abrir la conversación." };
+    const { error } = await window.brigadaSupabase
+      .from("messages")
+      .insert({ conversation_id: convId, from_user_id: myId, content: content, read: false });
+    if(error) return { ok:false, error:"messages insert: "+error.message };
+    await window.brigadaSupabase
+      .from("conversations")
+      .update({ last_message: content, last_message_at: new Date().toISOString() })
+      .eq("id", convId);
+    return { ok:true };
+  } catch(e){ return { ok:false, error:e.message }; }
+};
+
+// ✅ FASE 5: CHAT — cargar los mensajes de una solicitud
+window.brigadaLoadMessages = async function(applicationId){
+  try {
+    const { data: { session } } = await window.brigadaSupabase.auth.getSession();
+    if(!session) return [];
+    const myId = session.user.id;
+    const convId = await window.brigadaGetConversationId(applicationId);
+    if(!convId) return [];
+    const { data: msgs } = await window.brigadaSupabase
+      .from("messages")
+      .select("from_user_id,content,created_at")
+      .eq("conversation_id", convId)
+      .order("created_at", { ascending: true });
+    return (msgs || []).map(m => ({ from: m.from_user_id === myId ? "me" : "them", text: m.content }));
+  } catch(e){ console.error("❌ brigadaLoadMessages:", e); return []; }
+};
+
+// ✅ FASE 5: CHAT — pintar el hilo del chat con los mensajes reales
+window.brigadaRefreshChatThread = async function(applicationId){
+  if(!window.brigadaLoadMessages) return;
+  const msgs = await window.brigadaLoadMessages(applicationId);
+  const thread = document.getElementById("chatThread");
+  if(!thread || !msgs.length) return;
+  thread.innerHTML = msgs.map(m => `<div class="message ${m.from==="me"?"me":""}">${m.text}</div>`).join("");
+  thread.scrollTop = thread.scrollHeight;
+};
 function convertPublicationToOpportunity(pub){
   // Convierte una publicación del talento al formato esperado por el dashboard.
   // CRÍTICO: usa los datos del AUTOR guardados DENTRO de la publicación (pub.author),
@@ -8328,6 +8409,7 @@ function openConversation(id){
   // Área de acción según estado
   if(c.status === "accepted"){
     // Chat abierto: composer
+    if(c.requestId && window.brigadaRefreshChatThread) window.brigadaRefreshChatThread(c.requestId);
     $("chatActionArea").innerHTML = `<div class="chat-composer">
       <textarea id="chatMessageInput" placeholder="Escribe un mensaje..."></textarea>
       <button class="btn" data-action="send-chat">Enviar</button>
@@ -8359,7 +8441,7 @@ function openConversation(id){
     </div>`;
   }
 }
-function sendChatMessage(){let input=$("chatMessageInput");let text=input?.value.trim();if(!text)return;let c=conversations.find(x=>x.id===activeConversationId);if(!c)return;c.messages.push({from:"me",text});c.time="ahora";openConversation(c.id)}
+function sendChatMessage(){const input=$("chatMessageInput");const text=input?input.value.trim():"";if(!text)return;const all=getCombinedConversations();const c=all.find(x=>x.id===activeConversationId);if(!c||!c.requestId){if(typeof showToast==="function")showToast("No se pudo enviar el mensaje.");return;}if(input)input.value="";if(window.brigadaSendMessage){window.brigadaSendMessage(c.requestId,text).then(res=>{if(res.ok){if(window.brigadaRefreshChatThread)window.brigadaRefreshChatThread(c.requestId);}else if(typeof showToast==="function"){showToast("No se pudo enviar.");}});}}
 function simulateAccept(id){let c=conversations.find(x=>x.id===id);if(!c)return;c.status="accepted";c.context="Solicitud aceptada";c.messages.push({from:"system",text:`${c.name} aceptó la solicitud. Ya pueden conversar.`});openConversation(c.id)}
 
 function showRegisterCodeStep(type){
