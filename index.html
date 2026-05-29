@@ -5087,7 +5087,103 @@ window.brigadaStartRealtime = function(){
     console.log("✅ Tiempo real de chat activo");
   } catch(e){ console.error("❌ brigadaStartRealtime:", e); }
 };
-function convertPublicationToOpportunity(pub){
+// ============================================
+// FEED "Día a día de startups" — motor de datos (Supabase)
+// ============================================
+
+window.brigadaCreateStory = async function(story){
+  try {
+    const { data: { session } } = await window.brigadaSupabase.auth.getSession();
+    if(!session) return { ok:false, error:"No hay sesión activa." };
+    const row = {
+      user_id: session.user.id,
+      startup_name: story.startup_name || "Startup",
+      initials: story.initials || "??",
+      stage: story.stage || "",
+      title: story.title || "",
+      detail: story.detail || "",
+      mood: story.mood || "win"
+    };
+    const { data, error } = await window.brigadaSupabase
+      .from("stories").insert(row).select().single();
+    if(error) return { ok:false, error:"stories insert: "+error.message };
+    return { ok:true, story:data };
+  } catch(e){ return { ok:false, error:e.message }; }
+};
+
+window.brigadaLoadStories = async function(){
+  try {
+    const { data: { session } } = await window.brigadaSupabase.auth.getSession();
+    const myId = session ? session.user.id : null;
+
+    const { data: stories, error: e1 } = await window.brigadaSupabase
+      .from("stories").select("*").order("created_at", { ascending:false });
+    if(e1) return { ok:false, error:"stories load: "+e1.message };
+    if(!stories || stories.length === 0) return { ok:true, stories:[] };
+
+    const ids = stories.map(s => s.id);
+
+    const { data: comments, error: e2 } = await window.brigadaSupabase
+      .from("story_comments").select("*").in("story_id", ids)
+      .order("created_at", { ascending:true });
+    if(e2) return { ok:false, error:"comments load: "+e2.message };
+
+    let myClaps = [];
+    if(myId){
+      const { data: claps } = await window.brigadaSupabase
+        .from("story_claps").select("story_id").eq("user_id", myId);
+      myClaps = (claps||[]).map(c => c.story_id);
+    }
+
+    const byStory = {};
+    (comments||[]).forEach(c => { (byStory[c.story_id] = byStory[c.story_id] || []).push(c); });
+
+    const full = stories.map(s => ({
+      ...s,
+      comments: byStory[s.id] || [],
+      iClapped: myClaps.includes(s.id)
+    }));
+    return { ok:true, stories:full };
+  } catch(e){ return { ok:false, error:e.message }; }
+};
+
+window.brigadaToggleClap = async function(storyId, alreadyClapped){
+  try {
+    const { data: { session } } = await window.brigadaSupabase.auth.getSession();
+    if(!session) return { ok:false, error:"No hay sesión activa." };
+    const uid = session.user.id;
+    if(alreadyClapped){
+      const { error } = await window.brigadaSupabase
+        .from("story_claps").delete().eq("story_id", storyId).eq("user_id", uid);
+      if(error) return { ok:false, error:"clap delete: "+error.message };
+      return { ok:true, clapped:false };
+    } else {
+      const { error } = await window.brigadaSupabase
+        .from("story_claps").insert({ story_id:storyId, user_id:uid });
+      if(error) return { ok:false, error:"clap insert: "+error.message };
+      return { ok:true, clapped:true };
+    }
+  } catch(e){ return { ok:false, error:e.message }; }
+};
+
+window.brigadaAddComment = async function(storyId, content, authorName, authorRole){
+  try {
+    const { data: { session } } = await window.brigadaSupabase.auth.getSession();
+    if(!session) return { ok:false, error:"No hay sesión activa." };
+    const row = {
+      story_id: storyId,
+      user_id: session.user.id,
+      author_name: authorName || "Usuario",
+      author_role: authorRole || "",
+      content: content
+    };
+    const { data, error } = await window.brigadaSupabase
+      .from("story_comments").insert(row).select().single();
+    if(error) return { ok:false, error:"comment insert: "+error.message };
+    return { ok:true, comment:data };
+  } catch(e){ return { ok:false, error:e.message }; }
+};
+  function convertPublicationToOpportunity(pub){
   // Convierte una publicación del talento al formato esperado por el dashboard.
   // CRÍTICO: usa los datos del AUTOR guardados DENTRO de la publicación (pub.author),
   // no del usuario actualmente logueado. Así una startup ve correctamente al autor real.
