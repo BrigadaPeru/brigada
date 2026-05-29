@@ -5183,6 +5183,109 @@ window.brigadaAddComment = async function(storyId, content, authorName, authorRo
     return { ok:true, comment:data };
   } catch(e){ return { ok:false, error:e.message }; }
 };
+  // ============================================
+// FEED — Paso 3: conectar la UI con el motor real
+// ============================================
+
+window.brigadaTimeAgo = function(ts){
+  try {
+    const secs = Math.max(Math.floor((Date.now() - new Date(ts).getTime())/1000), 0);
+    if(secs < 60) return "ahora";
+    const m = Math.floor(secs/60); if(m < 60) return "hace " + m + " min";
+    const h = Math.floor(m/60); if(h < 24) return "hace " + h + " h";
+    const d = Math.floor(h/24); if(d < 7) return "hace " + d + (d===1?" día":" días");
+    const w = Math.floor(d/7); if(w < 5) return "hace " + w + " sem";
+    const mo = Math.max(Math.floor(d/30),1); return "hace " + mo + (mo===1?" mes":" meses");
+  } catch(e){ return ""; }
+};
+
+window.brigadaRefreshStories = async function(){
+  try {
+    const res = await window.brigadaLoadStories();
+    if(!res || !res.ok){ console.error("refreshStories:", res && res.error); return; }
+    if(!state.userClaps) state.userClaps = {};
+    startupStories.length = 0;
+    (res.stories || []).forEach(function(row){
+      state.userClaps[row.id] = !!row.iClapped;
+      startupStories.push({
+        id: row.id,
+        startup: row.startup_name || "Startup",
+        initials: row.initials || "??",
+        stage: row.stage || "",
+        team: "",
+        timeAgo: window.brigadaTimeAgo(row.created_at),
+        title: row.title || "",
+        detail: row.detail || "",
+        mood: row.mood || "win",
+        photo: "",
+        claps: Math.max((row.claps_count || 0) - (row.iClapped ? 1 : 0), 0),
+        comments: (row.comments || []).map(function(c){
+          return { author: c.author_name || "Usuario", role: c.author_role || "", text: c.content || "", timeAgo: window.brigadaTimeAgo(c.created_at) };
+        })
+      });
+    });
+    if(typeof renderStories === "function") renderStories();
+  } catch(e){ console.error("refreshStories excepción:", e); }
+};
+
+window.brigadaSubmitStory = async function(){
+  if(typeof requireAuth === "function" && !requireAuth()) return;
+  const u = authState.user || {};
+  if(!["startup","hire"].includes(u.type)){ showToast("Solo las startups pueden publicar historias."); return; }
+  const tEl = document.getElementById("storyTitleInput");
+  const dEl = document.getElementById("storyDetailInput");
+  const title = (tEl ? tEl.value : "").trim();
+  const detail = (dEl ? dEl.value : "").trim();
+  if(!title && !detail){ showToast("Escribe al menos un título o el detalle de tu hito."); return; }
+  const initials = (u.name || "??").split(" ").map(function(x){return x[0];}).filter(Boolean).slice(0,2).join("").toUpperCase();
+  showToast("Publicando...");
+  const res = await window.brigadaCreateStory({
+    startup_name: u.name || "Startup",
+    initials: initials,
+    stage: u.sector || "",
+    title: title || "(Sin título)",
+    detail: detail || "",
+    mood: "win"
+  });
+  if(!res.ok){ showToast("No se pudo publicar: " + res.error); return; }
+  if(typeof closeModal === "function") closeModal();
+  showToast("¡Hito publicado!");
+  await window.brigadaRefreshStories();
+};
+
+window.brigadaPublishComment = async function(id){
+  const ta = document.getElementById("storyCommentTextarea" + id);
+  if(!ta) return;
+  const text = (ta.value || "").trim();
+  if(!text){ showToast("Escribe un comentario antes de publicar."); return; }
+  const u = authState.user || {};
+  const role = (u.skills && u.skills.length) ? u.skills[0] : ((u.type === "startup" || u.type === "hire") ? "Startup" : "Persona");
+  const res = await window.brigadaAddComment(id, text, u.name || "Usuario", role);
+  if(!res.ok){ showToast("No se pudo comentar: " + res.error); return; }
+  if(state.openCommentBox) state.openCommentBox[id] = false;
+  showToast("Comentario publicado.");
+  await window.brigadaRefreshStories();
+};
+
+window.brigadaClapAndRefresh = async function(id){
+  if(!state.userClaps) state.userClaps = {};
+  const wasClapped = !!state.userClaps[id];
+  state.userClaps[id] = !wasClapped;
+  if(!wasClapped){
+    const card = document.getElementById("story-card-" + id);
+    if(card){
+      const burst = document.createElement("div");
+      burst.className = "clap-burst";
+      burst.textContent = "👏 +1";
+      card.appendChild(burst);
+      setTimeout(function(){ burst.remove(); }, 1200);
+    }
+  }
+  if(typeof renderStories === "function") renderStories();
+  const res = await window.brigadaToggleClap(id, wasClapped);
+  if(!res || !res.ok){ console.error("clap:", res && res.error); }
+  await window.brigadaRefreshStories();
+};
   function convertPublicationToOpportunity(pub){
   // Convierte una publicación del talento al formato esperado por el dashboard.
   // CRÍTICO: usa los datos del AUTOR guardados DENTRO de la publicación (pub.author),
