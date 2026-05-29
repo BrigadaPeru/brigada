@@ -3932,7 +3932,8 @@ body.user-talent .account-tab.personal-only{
       // 1) Registrar en Supabase Auth
       const { data: authData, error: authError } = await window.brigadaSupabase.auth.signUp({
         email: email,
-        password: password
+        password: password,
+        options: { data: { name: name, type: type } }
       });
       if (authError) {
         console.error("❌ Signup Auth error:", authError);
@@ -3942,27 +3943,10 @@ body.user-talent .account-tab.personal-only{
         return { ok: false, error: "No se pudo crear el usuario en Auth." };
       }
 
-      // 2) Insertar fila en tabla public.users con datos de negocio
-      const { data: profileData, error: profileError } = await window.brigadaSupabase
-        .from("users")
-        .insert({
-          id: authData.user.id,
-          email: email,
-          name: name,
-          type: type,
-          profile_complete: false,
-          completion: 10
-        })
-        .select()
-        .single();
+      
 
-      if (profileError) {
-        console.error("❌ Signup Profile error:", profileError);
-        return { ok: false, error: "Cuenta creada en Auth pero falló al guardar perfil: " + profileError.message };
-      }
-
-      console.log("✅ Signup completo:", profileData);
-      return { ok: true, user: profileData };
+      console.log("✅ Cuenta creada en Auth. Falta confirmar correo.");
+      return { ok: true, user: { id: authData.user.id, email: email, name: name, type: type }, needsConfirmation: true };
     } catch (e) {
       console.error("❌ Signup excepción:", e);
       return { ok: false, error: e.message };
@@ -9133,29 +9117,10 @@ async function finalizeOnboarding(type){
       return;
     }
 
-    // ✅ Cuenta creada. Construir authState.user con datos REALES de Supabase + datos del formulario
-    const firstName = startupName.split(" ")[0] || "Startup";
-    authState.isAuthenticated = true;
-    authState.user = {
-      id: result.user.id,
-      email: result.user.email,
-      firstName: firstName,
-      name: startupName,
-      roleLabel: "Cuenta de startup",
-      type: "startup",
-      city: city,
-      country: country,
-      bio: bio,
-      sector: sector,
-      completion: 35,
-      profileComplete: false,
-      editingProfile: false,
-      profileAnswers: {}
-    };
+    // ✅ Cuenta creada. Con "Confirm email" activo, no entramos aún: pedimos confirmar correo.
     delete window.brigadaRegisterDraft;
     closeModal();
-    setAuthUI();
-    showAppDashboard();
+    showToast("📩 ¡Casi listo! Revisa tu correo (" + draft.email + ") y haz clic en el enlace para confirmar tu cuenta.");
     return;
   }
 
@@ -9212,28 +9177,11 @@ async function finalizeOnboarding(type){
     return;
   }
 
-  // ✅ Cuenta creada. Construir authState.user con datos REALES de Supabase + datos del formulario
-  authState.isAuthenticated = true;
-  authState.user = {
-    id: result.user.id,
-    email: result.user.email,
-    firstName: firstName || "Usuario",
-    name: fullName,
-    roleLabel: "Cuenta personal",
-    type: "talent",
-    city: city,
-    country: country,
-    areas: selectedAreas,
-    skills: derivedSkills,
-    completion: selectedAreas.length > 0 ? 50 : 35,
-    profileComplete: false,
-    editingProfile: false,
-    savedJobs: []
-  };
+  // ✅ Cuenta creada. Con "Confirm email" activo, no entramos aún: pedimos confirmar correo.
   delete window.brigadaRegisterDraft;
   closeModal();
-  setAuthUI();
-  showAppDashboard();
+  showToast("📩 ¡Casi listo! Revisa tu correo (" + draft.email + ") y haz clic en el enlace para confirmar tu cuenta.");
+  return;
 }
 
 const modalTemplates={
