@@ -5006,6 +5006,61 @@ window.brigadaRefreshChatThread = async function(applicationId){
   thread.innerHTML = msgs.map(m => `<div class="message ${m.from==="me"?"me":""}">${m.text}</div>`).join("");
   thread.scrollTop = thread.scrollHeight;
 };
+
+  // ✅ FASE 5 (fix): crear conversación SIN sembrar el mensaje inicial (lo bloquea RLS)
+window.brigadaGetConversationId = async function(applicationId){
+  try {
+    if(!applicationId) return null;
+    const { data: existing } = await window.brigadaSupabase
+      .from("conversations")
+      .select("id")
+      .eq("application_id", applicationId)
+      .limit(1);
+    if(existing && existing.length) return existing[0].id;
+    const { data: app } = await window.brigadaSupabase
+      .from("applications")
+      .select("from_user_id,to_user_id,message")
+      .eq("id", applicationId)
+      .single();
+    if(!app) return null;
+    const { data: created, error } = await window.brigadaSupabase
+      .from("conversations")
+      .insert({ user1_id: app.from_user_id, user2_id: app.to_user_id, application_id: applicationId, last_message: app.message || "", last_message_at: new Date().toISOString() })
+      .select("id")
+      .single();
+    if(error){ console.error("crear conversación:", error.message); return null; }
+    return created.id;
+  } catch(e){ console.error("❌ brigadaGetConversationId:", e); return null; }
+};
+
+// ✅ FASE 5 (fix): el mensaje inicial se muestra desde la solicitud, no desde la tabla messages
+window.brigadaLoadMessages = async function(applicationId){
+  try {
+    const { data: { session } } = await window.brigadaSupabase.auth.getSession();
+    if(!session) return [];
+    const myId = session.user.id;
+    const { data: app } = await window.brigadaSupabase
+      .from("applications")
+      .select("from_user_id,message")
+      .eq("id", applicationId)
+      .single();
+    const opener = (app && app.message)
+      ? [{ from: app.from_user_id === myId ? "me" : "them", text: app.message }]
+      : [];
+    const convId = await window.brigadaGetConversationId(applicationId);
+    if(!convId) return opener;
+    const { data: msgs } = await window.brigadaSupabase
+      .from("messages")
+      .select("from_user_id,content,created_at")
+      .eq("conversation_id", convId)
+      .order("created_at", { ascending: true });
+    const real = (msgs || []).map(m => ({ from: m.from_user_id === myId ? "me" : "them", text: m.content }));
+    if(opener.length && real.length && real[0].text === opener[0].text && real[0].from === opener[0].from){
+      return real;
+    }
+    return [...opener, ...real];
+  } catch(e){ console.error("❌ brigadaLoadMessages:", e); return []; }
+};
 function convertPublicationToOpportunity(pub){
   // Convierte una publicación del talento al formato esperado por el dashboard.
   // CRÍTICO: usa los datos del AUTOR guardados DENTRO de la publicación (pub.author),
