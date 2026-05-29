@@ -5061,6 +5061,21 @@ window.brigadaLoadMessages = async function(applicationId){
     return [...opener, ...real];
   } catch(e){ console.error("❌ brigadaLoadMessages:", e); return []; }
 };
+
+  // ✅ FASE 5 parte 2: vista previa de la lista = último mensaje real (desde conversations.last_message)
+window.brigadaRefreshConversationPreviews = async function(){
+  try {
+    if(!window.brigadaSupabase) return;
+    const { data: convs } = await window.brigadaSupabase
+      .from("conversations")
+      .select("application_id,last_message");
+    window._convPreviews = window._convPreviews || {};
+    (convs || []).forEach(cv => {
+      if(cv.application_id) window._convPreviews[cv.application_id] = cv.last_message || "";
+    });
+    if(typeof renderConversationList === "function") renderConversationList();
+  } catch(e){ console.error("❌ brigadaRefreshConversationPreviews:", e); }
+};
 function convertPublicationToOpportunity(pub){
   // Convierte una publicación del talento al formato esperado por el dashboard.
   // CRÍTICO: usa los datos del AUTOR guardados DENTRO de la publicación (pub.author),
@@ -6038,7 +6053,7 @@ function showChatPage(id=null){
   hideAll();
   setActiveNav("chat");
   $("chatPage").classList.remove("hidden");
-  $("chatPage").classList.add("active");
+  $("chatPage").classList.add("active");if(window.brigadaRefreshConversationPreviews)window.brigadaRefreshConversationPreviews();
   if(!state.chatFilter) state.chatFilter = "all";
   renderConversationList();
   // Si pasaron un id específico, abrirlo. Si no, abrir el primero de la lista filtrada.
@@ -7496,7 +7511,7 @@ function renderConversationList(){
           <strong>${c.name}</strong>
           <span class="conversation-time">${c.time}</span>
         </div>
-        <div class="conversation-snippet">${prefix}${preview}</div>
+        <div class="conversation-snippet">${(window._convPreviews&&c.requestId&&window._convPreviews[c.requestId])?(window._convPreviews[c.requestId].substring(0,50)+(window._convPreviews[c.requestId].length>50?"…":"")):(prefix+preview)}</div>
         <span class="status-pill ${pillClass}">${pillText}</span>
       </div>
     </button>`;
