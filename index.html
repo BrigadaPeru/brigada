@@ -4818,6 +4818,23 @@ window.brigadaRefreshSharedRequests = async function(){
   // Redibujar si estamos en Mensajes
   if(typeof renderConversationList === "function") renderConversationList();
 };
+
+  // ✅ FASE 3: Aceptar o rechazar una solicitud (actualiza Supabase)
+window.brigadaRespondApplication = async function(applicationId, newStatus){
+  try {
+    if(!applicationId) return { ok: false, error: "Falta el id de la solicitud." };
+    const { error } = await window.brigadaSupabase
+      .from("applications")
+      .update({ status: newStatus, responded_at: new Date().toISOString() })
+      .eq("id", applicationId);
+    if(error) return { ok: false, error: "applications update: " + error.message };
+    console.log("✅ Solicitud", applicationId, "→", newStatus);
+    return { ok: true };
+  } catch (e) {
+    console.error("❌ brigadaRespondApplication excepción:", e);
+    return { ok: false, error: e.message };
+  }
+};
 function convertPublicationToOpportunity(pub){
   // Convierte una publicación del talento al formato esperado por el dashboard.
   // CRÍTICO: usa los datos del AUTOR guardados DENTRO de la publicación (pub.author),
@@ -9115,7 +9132,7 @@ if(window.brigadaCreateApplication && targetOpp && targetOpp.id){
     }
     const req = window._sharedState.sharedRequests.find(r => r.id === reqId);
     if(req){
-      req.status = "accepted";
+      req.status = "accepted"; if(window.brigadaRespondApplication) window.brigadaRespondApplication(reqId, "accepted");
       // Sincronizar estado en personalApplications del talento (Opción A: honestidad total)
       if(typeof personalApplications !== "undefined"){
         const app = personalApplications.find(a => a.requestId === reqId);
@@ -9141,7 +9158,7 @@ if(window.brigadaCreateApplication && targetOpp && targetOpp.id){
     }
     const req = window._sharedState.sharedRequests.find(r => r.id === reqId);
     if(req){
-      req.status = "rejected";
+      req.status = "rejected"; if(window.brigadaRespondApplication) window.brigadaRespondApplication(reqId, "rejected");
       // Sincronizar estado en personalApplications del talento
       if(typeof personalApplications !== "undefined"){
         const app = personalApplications.find(a => a.requestId === reqId);
