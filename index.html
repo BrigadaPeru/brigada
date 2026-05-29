@@ -5076,6 +5076,32 @@ window.brigadaRefreshConversationPreviews = async function(){
     if(typeof renderConversationList === "function") renderConversationList();
   } catch(e){ console.error("❌ brigadaRefreshConversationPreviews:", e); }
 };
+
+  // ✅ FASE 5 parte 2: TIEMPO REAL — escuchar mensajes nuevos y refrescar al instante
+window._brigadaRealtimeChannel = null;
+window.brigadaStartRealtime = function(){
+  try {
+    if(!window.brigadaSupabase || !window.brigadaSupabase.channel) return;
+    if(window._brigadaRealtimeChannel) return; // ya está activo
+    const ch = window.brigadaSupabase
+      .channel("brigada-chat")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, function(){
+        try {
+          const all = (typeof getCombinedConversations === "function") ? getCombinedConversations() : [];
+          const c = all.find(x => x.id === activeConversationId);
+          if(c && c.requestId && window.brigadaRefreshChatThread){
+            window.brigadaRefreshChatThread(c.requestId);
+          }
+          if(window.brigadaRefreshConversationPreviews){
+            window.brigadaRefreshConversationPreviews();
+          }
+        } catch(e){ console.error("realtime handler:", e); }
+      })
+      .subscribe();
+    window._brigadaRealtimeChannel = ch;
+    console.log("✅ Tiempo real de chat activo");
+  } catch(e){ console.error("❌ brigadaStartRealtime:", e); }
+};
 function convertPublicationToOpportunity(pub){
   // Convierte una publicación del talento al formato esperado por el dashboard.
   // CRÍTICO: usa los datos del AUTOR guardados DENTRO de la publicación (pub.author),
@@ -5413,7 +5439,7 @@ async function logoutUser(){
   showHome();
 }
 function requireAuth(){if(!authState.isAuthenticated){openModal("login");return false}return true}
-function showAppDashboard(){if(!requireAuth())return;hideAll();setActiveNav("dashboard");$("appShell").classList.remove("hidden");$("appShell").classList.add("active");if(window.brigadaRefreshAllPublications)window.brigadaRefreshAllPublications();if(window.brigadaRefreshAllJobs)window.brigadaRefreshAllJobs();if(window.brigadaRefreshSharedRequests)window.brigadaRefreshSharedRequests();renderDashboard();scrollTo(0,0)}
+function showAppDashboard(){if(!requireAuth())return;hideAll();setActiveNav("dashboard");$("appShell").classList.remove("hidden");$("appShell").classList.add("active");if(window.brigadaRefreshAllPublications)window.brigadaRefreshAllPublications();if(window.brigadaRefreshAllJobs)window.brigadaRefreshAllJobs();if(window.brigadaRefreshSharedRequests)window.brigadaRefreshSharedRequests();if(window.brigadaStartRealtime)window.brigadaStartRealtime();renderDashboard();scrollTo(0,0)}
 function showAppDiscover(){if(!requireAuth())return;hideAll();setActiveNav("discover");$("discoverPage").classList.remove("hidden");$("discoverPage").classList.add("active");renderSubfilters();renderResults();scrollTo(0,0)}
 function showPartnersPage(){
   // [PARTNERS DESHABILITADO - Para reactivar en el futuro: borrar estas 2 líneas]
