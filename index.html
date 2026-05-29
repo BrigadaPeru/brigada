@@ -4835,6 +4835,96 @@ window.brigadaRespondApplication = async function(applicationId, newStatus){
     return { ok: false, error: e.message };
   }
 };
+
+  // ✅ FASE 3 (parte 2): Cargar desde Supabase las postulaciones que YO (talento) envié
+window.brigadaLoadMyApplications = async function(){
+  try {
+    const { data: { session } } = await window.brigadaSupabase.auth.getSession();
+    if(!session) return [];
+    const myId = session.user.id;
+
+    const { data: apps, error } = await window.brigadaSupabase
+      .from("applications")
+      .select("*")
+      .eq("from_user_id", myId)
+      .order("created_at", { ascending: false });
+    if(error){ console.error("Error cargando mis postulaciones:", error); return []; }
+    if(!apps || !apps.length) return [];
+
+    // Traer los puestos a los que postulé + el nombre de la startup dueña
+    const jobIds = [...new Set(apps.filter(a => a.target_type === "job").map(a => a.target_id).filter(Boolean))];
+    const jobsById = {};
+    const ownerNameById = {};
+    if(jobIds.length){
+      const { data: jobs } = await window.brigadaSupabase
+        .from("jobs")
+        .select("id,title,compensation,modality,user_id")
+        .in("id", jobIds);
+      (jobs || []).forEach(j => { jobsById[j.id] = j; });
+
+      const ownerIds = [...new Set((jobs || []).map(j => j.user_id).filter(Boolean))];
+      if(ownerIds.length){
+        const { data: owners } = await window.brigadaSupabase
+          .from("users")
+          .select("id,name")
+          .in("id", ownerIds);
+        (owners || []).forEach(o => { ownerNameById[o.id] = o.name; });
+      }
+    }
+
+    return apps.map(a => {
+      const job = jobsById[a.target_id] || {};
+      return {
+        ...a,
+        jobTitle: job.title || "Puesto",
+        company: ownerNameById[job.user_id] || "Startup",
+        jobCompensation: job.compensation || "",
+        jobModality: job.modality || ""
+      };
+    });
+  } catch (e) {
+    console.error("❌ brigadaLoadMyApplications excepción:", e);
+    return [];
+  }
+};
+
+  // ✅ FASE 3 (parte 2): Mostrar mis postulaciones con el estado REAL desde Supabase
+window.brigadaRefreshMyApplications = async function(){
+  if(!window.brigadaLoadMyApplications || typeof personalApplications === "undefined") return;
+  const rows = await window.brigadaLoadMyApplications();
+  const me = authState.user || {};
+
+  // Quitar las postulaciones reales anteriores (mantener seeds), evitar duplicados
+  for(let i = personalApplications.length - 1; i >= 0; i--){
+    if(!personalApplications[i].isSeed) personalApplications.splice(i, 1);
+  }
+
+  const compLabels = { salary:"Salario", equity:"Acciones", salary_equity:"Salario + acciones", options:"Opciones sobre acciones" };
+  const statusInfo = {
+    pending:  { label: "Postulación enviada", note: "Tu solicitud fue enviada. Te avisamos si la startup responde." },
+    accepted: { label: "Conversación abierta", note: "¡La startup aceptó tu solicitud! Ya pueden conversar en Mensajes." },
+    rejected: { label: "Rechazada", note: "La startup decidió no continuar con tu postulación esta vez." }
+  };
+
+  rows.forEach(a => {
+    const info = statusInfo[a.status] || statusInfo.pending;
+    const compLabel = compLabels[a.jobCompensation] || a.jobCompensation || "";
+    const meta = [compLabel, a.jobModality].filter(Boolean).join(" · ");
+    personalApplications.unshift({
+      id: a.id,
+      isSeed: false,
+      applicantName: me.name,
+      requestId: a.id,
+      title: a.jobTitle || "Puesto",
+      company: a.company || "Startup",
+      meta: meta,
+      status: info.label,
+      note: info.note
+    });
+  });
+
+  if(typeof renderMyApplications === "function") renderMyApplications();
+};
 function convertPublicationToOpportunity(pub){
   // Convierte una publicación del talento al formato esperado por el dashboard.
   // CRÍTICO: usa los datos del AUTOR guardados DENTRO de la publicación (pub.author),
@@ -7663,7 +7753,7 @@ function showMyApplicationsPage(){
   hideAll();
   setActiveNav("my-applications");
   $("myApplicationsPage").classList.remove("hidden");
-  $("myApplicationsPage").classList.add("active");
+  $("myApplicationsPage").classList.add("active");if(window.brigadaRefreshMyApplications)window.brigadaRefreshMyApplications();
   renderMyApplications();
   scrollTo(0,0);
 }
