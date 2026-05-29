@@ -4728,6 +4728,96 @@ window.brigadaCreateApplication = async function(targetType, targetId, message){
     return { ok: false, error: e.message };
   }
 };
+
+  // ✅ FASE 2: Cargar desde Supabase todas las solicitudes donde participo (recibidas + enviadas)
+window.brigadaLoadMyRequests = async function(){
+  try {
+    const { data: { session } } = await window.brigadaSupabase.auth.getSession();
+    if(!session) return [];
+    const myId = session.user.id;
+
+    // Traer todas las solicitudes donde soy remitente O destinatario
+    const { data: apps, error } = await window.brigadaSupabase
+      .from("applications")
+      .select("*")
+      .or("from_user_id.eq." + myId + ",to_user_id.eq." + myId)
+      .order("created_at", { ascending: false });
+    if(error){ console.error("Error cargando solicitudes:", error); return []; }
+    if(!apps || !apps.length) return [];
+
+    // Traer datos de todas las personas involucradas (nombres, ciudad, etc.)
+    const userIds = [...new Set(apps.flatMap(a => [a.from_user_id, a.to_user_id]).filter(Boolean))];
+    const usersById = {};
+    const talentById = {};
+    if(userIds.length){
+      const { data: users } = await window.brigadaSupabase
+        .from("users")
+        .select("id,name,city,country,bio,type")
+        .in("id", userIds);
+      (users || []).forEach(u => { usersById[u.id] = u; });
+
+      const { data: tprofiles } = await window.brigadaSupabase
+        .from("talent_profiles")
+        .select("user_id,skills,areas")
+        .in("user_id", userIds);
+      (tprofiles || []).forEach(p => { talentById[p.user_id] = p; });
+    }
+
+    // Devolver cada solicitud con los datos de quien envía y quien recibe
+    return apps.map(a => ({
+      ...a,
+      _myId: myId,
+      fromUser: usersById[a.from_user_id] || null,
+      toUser: usersById[a.to_user_id] || null,
+      fromTalent: talentById[a.from_user_id] || null
+    }));
+  } catch (e) {
+    console.error("❌ brigadaLoadMyRequests excepción:", e);
+    return [];
+  }
+};
+
+  // ✅ FASE 2: Convertir las solicitudes de Supabase al formato de la pantalla de Mensajes
+window.brigadaRefreshSharedRequests = async function(){
+  if(!window.brigadaLoadMyRequests || !window._sharedState) return;
+  const rows = await window.brigadaLoadMyRequests();
+
+  const requests = rows.map(a => {
+    const fromU = a.fromUser || {};
+    const toU = a.toUser || {};
+    const fromTalent = a.fromTalent || {};
+    const fromIsPerson = (fromU.type === "talent");
+    const toIsPerson = (toU.type === "talent");
+    return {
+      id: a.id, // el id real de Supabase
+      timestamp: a.created_at,
+      from: {
+        name: fromU.name || "Persona",
+        type: fromU.type || "talent",
+        isPerson: fromIsPerson,
+        bio: fromU.bio || "",
+        city: fromU.city || "",
+        skills: fromTalent.skills || fromTalent.areas || [],
+        sector: ""
+      },
+      to: {
+        name: toU.name || "Startup",
+        isPerson: toIsPerson
+      },
+      jobId: a.target_id || null,
+      jobTitle: null,
+      message: a.message || "",
+      status: a.status || "pending"
+    };
+  });
+
+  // Reemplazar el array en memoria por las solicitudes reales de Supabase
+  window._sharedState.sharedRequests.length = 0;
+  requests.forEach(r => window._sharedState.sharedRequests.push(r));
+
+  // Redibujar si estamos en Mensajes
+  if(typeof renderConversationList === "function") renderConversationList();
+};
 function convertPublicationToOpportunity(pub){
   // Convierte una publicación del talento al formato esperado por el dashboard.
   // CRÍTICO: usa los datos del AUTOR guardados DENTRO de la publicación (pub.author),
@@ -5065,7 +5155,7 @@ async function logoutUser(){
   showHome();
 }
 function requireAuth(){if(!authState.isAuthenticated){openModal("login");return false}return true}
-function showAppDashboard(){if(!requireAuth())return;hideAll();setActiveNav("dashboard");$("appShell").classList.remove("hidden");$("appShell").classList.add("active");if(window.brigadaRefreshAllPublications)window.brigadaRefreshAllPublications();if(window.brigadaRefreshAllJobs)window.brigadaRefreshAllJobs();renderDashboard();scrollTo(0,0)}
+function showAppDashboard(){if(!requireAuth())return;hideAll();setActiveNav("dashboard");$("appShell").classList.remove("hidden");$("appShell").classList.add("active");if(window.brigadaRefreshAllPublications)window.brigadaRefreshAllPublications();if(window.brigadaRefreshAllJobs)window.brigadaRefreshAllJobs();if(window.brigadaRefreshSharedRequests)window.brigadaRefreshSharedRequests();renderDashboard();scrollTo(0,0)}
 function showAppDiscover(){if(!requireAuth())return;hideAll();setActiveNav("discover");$("discoverPage").classList.remove("hidden");$("discoverPage").classList.add("active");renderSubfilters();renderResults();scrollTo(0,0)}
 function showPartnersPage(){
   // [PARTNERS DESHABILITADO - Para reactivar en el futuro: borrar estas 2 líneas]
