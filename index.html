@@ -6011,6 +6011,29 @@ window.brigadaToggleSaveStory = async function(storyId){
     if(typeof renderStories === "function") renderStories();
   } catch(e){ showToast("Error: " + e.message); }
 };
+  // ============================================
+// FEED — filtro "Todas / Guardadas"
+// ============================================
+
+window.brigadaToggleSavedView = function(on){
+  state.showSavedOnly = !!on;
+  if(typeof renderStories === "function") renderStories();
+};
+
+window.brigadaSavedChipHtml = function(){
+  var savedCount = state.savedStories ? Object.keys(state.savedStories).length : 0;
+  var on = !!state.showSavedOnly;
+  var base = "font-family:'JetBrains Mono',monospace;font-size:.74rem;padding:7px 14px;border-radius:999px;border:1px solid var(--line);background:var(--paper);color:var(--ink);cursor:pointer";
+  var active = ";border-color:#a0522d;background:#a0522d;color:#fff";
+  var chip = '<div style="display:flex;gap:8px;margin-bottom:16px">'
+    + '<button type="button" data-action="saved-view" data-on="0" style="'+base+(on?'':active)+'">Todas</button>'
+    + '<button type="button" data-action="saved-view" data-on="1" style="'+base+(on?active:'')+'">📌 Guardadas'+(savedCount?(' ('+savedCount+')'):'')+'</button>'
+    + '</div>';
+  if(on && savedCount === 0){
+    chip += '<div class="empty-state-aspirational"><div class="empty-state-title">Aún no has guardado publicaciones. Toca "Guardar" en cualquier historia.</div></div>';
+  }
+  return chip;
+};
   function convertPublicationToOpportunity(pub){
   // Convierte una publicación del talento al formato esperado por el dashboard.
   // CRÍTICO: usa los datos del AUTOR guardados DENTRO de la publicación (pub.author),
@@ -6772,7 +6795,7 @@ function renderStories(){
     return;
   }
 
-  feed.innerHTML = storiesToShow.map((s,i) => {
+  feed.innerHTML = (window.brigadaSavedChipHtml ? window.brigadaSavedChipHtml() : "") + storiesToShow.filter(function(s){ return !state.showSavedOnly || (state.savedStories && state.savedStories[s.id]); }).map((s,i) => {
     const userHasClapped = state.userClaps[s.id];
     const totalCommentsHere = (s.comments || []).length;
     const showAllComments = state.expandedComments[s.id];
@@ -10437,7 +10460,7 @@ else if(a==="do-login") window.handleLogin();
   else if(a==="toggle-story-comments-expand") toggleStoryCommentsExpand(btn.dataset.id);
   else if(a==="story-clap") window.brigadaClapAndRefresh(btn.dataset.id); else if(a==="show-clappers") window.brigadaShowClappers(btn.dataset.id); else if(a==="show-clappers") window.brigadaShowClappers(btn.dataset.id);
   else if(a==="publish-story-comment") window.brigadaPublishComment(btn.dataset.id); else if(a==="delete-comment") window.brigadaDeleteComment(btn.dataset.id); else if(a==="edit-comment") window.brigadaEditComment(btn.dataset.id); else if(a==="delete-comment") window.brigadaDeleteComment(btn.dataset.id); else if(a==="edit-comment") window.brigadaEditComment(btn.dataset.id);
-  else if(a==="story-save") saveStory(Number(btn.dataset.index)); else if(a==="brigada-save") window.brigadaToggleSaveStory(btn.dataset.id);
+  else if(a==="story-save") saveStory(Number(btn.dataset.index)); else if(a==="brigada-save") window.brigadaToggleSaveStory(btn.dataset.id); else if(a==="saved-view") window.brigadaToggleSavedView(btn.dataset.on==="1");
   else if(a==="open-feedback") openFeedbackModal();
   else if(a==="feedback-feed") setFeedbackFeed(btn.dataset.feed);
   else if(a==="toggle-feedback-answer") toggleFeedbackAnswer(Number(btn.dataset.index),btn.dataset.feed); else if(a==="publish-answer") window.brigadaPublishAnswer(btn.dataset.id); else if(a==="delete-answer") window.brigadaDeleteAnswer(btn.dataset.id);
