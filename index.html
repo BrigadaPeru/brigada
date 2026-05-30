@@ -5521,6 +5521,38 @@ window.brigadaStartNotificationsRealtime = async function(){
     console.log("✅ Tiempo real de notificaciones activo");
   } catch(e){ console.error("startNotifRealtime:", e); }
 };
+  // ============================================
+// NOTIFICACIONES — desbloquear sonido + campanita insistente
+// ============================================
+
+// Desbloquear el audio con el primer clic (regla de los navegadores)
+window.brigadaUnlockAudio = function(){
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if(!Ctx) return;
+    if(!window._brigadaAudioCtx) window._brigadaAudioCtx = new Ctx();
+    if(window._brigadaAudioCtx.state === "suspended") window._brigadaAudioCtx.resume();
+  } catch(e){}
+};
+document.addEventListener("click", function(){ window.brigadaUnlockAudio(); });
+
+// Vibrar la campanita cada 5s mientras haya notificaciones sin leer
+window._brigadaBellNag = null;
+window.brigadaStartBellNag = function(){
+  if(window._brigadaBellNag) return;
+  window._brigadaBellNag = setInterval(function(){
+    try {
+      const bell = document.getElementById("brigadaBell") || document.querySelector(".top-bell");
+      if(!bell || !bell.animate) return;
+      if(!bell.querySelector(".brigada-notif-badge")) return;
+      bell.animate([
+        { transform:"rotate(0)" },{ transform:"rotate(-12deg)" },{ transform:"rotate(10deg)" },
+        { transform:"rotate(-7deg)" },{ transform:"rotate(5deg)" },{ transform:"rotate(0)" }
+      ], { duration:600, easing:"ease-in-out" });
+    } catch(e){}
+  }, 5000);
+};
+window.brigadaStartBellNag();
   function convertPublicationToOpportunity(pub){
   // Convierte una publicación del talento al formato esperado por el dashboard.
   // CRÍTICO: usa los datos del AUTOR guardados DENTRO de la publicación (pub.author),
