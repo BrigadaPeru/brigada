@@ -6171,7 +6171,7 @@ window.brigadaRenderAnswers = function(p){
   body.logged-in .top-account-bar .btn{padding:7px 12px;font-size:.72rem}
   body.logged-in .app-sidebar{display:flex !important;top:0;bottom:0;transform:translateX(-105%);transition:transform .28s ease;width:84%;max-width:300px;z-index:95;overflow-y:auto;box-shadow:0 0 50px rgba(0,0,0,.28);padding-top:calc(24px + env(safe-area-inset-top))}
   body.logged-in.bp-nav-open .app-sidebar{transform:translateX(0)}
-  body.logged-in.bp-nav-open .bp-nav-backdrop{display:block}
+  body.logged-in.bp-nav-open .bp-nav-backdrop{display:block;}   body.logged-in .feedback-fab{bottom:calc(78px + env(safe-area-inset-bottom)) !important;right:16px !important}
 }
 `;
   document.head.appendChild(css);
@@ -7534,7 +7534,7 @@ function renderDashboard(){
   const profileIncompleteBanner = !u.profileComplete ? `<div class="profile-incomplete-banner">
       <div>
         <strong>Tu perfil está incompleto</strong>
-        <span>Para postular a un puesto necesitas completar tu perfil. Mientras tanto, explora libremente.</span>
+        <span>${(authState&&authState.user&&(authState.user.type==='startup'||authState.user.type==='hire'))?'Para contactarte con posibles talentos para tu empresa necesitas completar tu perfil. Mientras tanto, explora libremente.':'Para postular a un puesto necesitas completar tu perfil. Mientras tanto, explora libremente.'}</span>
       </div>
       <button class="btn" data-action="profile">Completar mi perfil</button>
     </div>` : "";
