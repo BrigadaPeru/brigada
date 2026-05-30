@@ -5735,7 +5735,7 @@ window.brigadaRefreshFeedback = async function(){
   try {
     const res = await window.brigadaLoadFeedback();
     if(!res || !res.ok){ console.error("refreshFeedback:", res && res.error); return; }
-    feedbackPosts.length = 0;
+    if(window.brigadaStartFeedbackRealtime) window.brigadaStartFeedbackRealtime(); if(window.brigadaStartFeedbackRealtime) window.brigadaStartFeedbackRealtime(); feedbackPosts.length = 0;
     (res.posts || []).forEach(function(p){
       feedbackPosts.push({
         id: p.id,
@@ -5780,6 +5780,22 @@ window.brigadaDeleteFeedback = async function(postId){
     showToast("Pregunta eliminada.");
     await window.brigadaRefreshFeedback();
   } catch(e){ showToast("Error: " + e.message); }
+};
+  // ============================================
+// FEEDBACK — tiempo real
+// ============================================
+
+window.brigadaFeedbackChannel = null;
+window.brigadaStartFeedbackRealtime = function(){
+  try {
+    if(window.brigadaFeedbackChannel) return;
+    window.brigadaFeedbackChannel = window.brigadaSupabase
+      .channel("brigada-feedback")
+      .on("postgres_changes", { event:"*", schema:"public", table:"feedback_posts" }, function(){
+        if(window.brigadaRefreshFeedback) window.brigadaRefreshFeedback();
+      })
+      .subscribe();
+  } catch(e){ console.error("feedback realtime:", e); }
 };
   function convertPublicationToOpportunity(pub){
   // Convierte una publicación del talento al formato esperado por el dashboard.
@@ -7770,9 +7786,9 @@ function renderFeedback(){
   let posts = feedbackPosts.filter(p=>p.feed===feed);
   // Si hay sesión, ocultar los posts seed (que son inventados)
   if(authState && authState.isAuthenticated){
-    posts = posts.filter(p => p.mine);
+    
   }
-  if(effectiveFilter==="mine") posts = posts.filter(p => p.mine);
+  if(effectiveFilter==="mine") posts = posts.filter(function(p){ return p.mine; });
 
   const isStartupUserFeedback = authState && authState.isAuthenticated && ["startup","hire"].includes(authState.user.type);
 
