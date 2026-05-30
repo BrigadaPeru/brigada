@@ -3689,7 +3689,7 @@ body.user-talent .account-tab.personal-only{
       <span id="topAccountRole">Cuenta personal</span>
     </div>
   </div>
-  <button class="top-bell has-news" data-action="notifications" title="Notificaciones">
+  <button class="top-bell" id="brigadaBell" data-action="notifications" title="Notificaciones">
       <svg viewBox="0 0 24 24"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg>
     </button><button class="btn secondary" data-action="logout">Salir</button>
 </div>
@@ -5409,6 +5409,118 @@ window.brigadaRefreshStories = async function(){
     if(typeof renderStories === "function") renderStories();
   } catch(e){ console.error("refreshStories excepción:", e); }
 };
+  // ============================================
+// NOTIFICACIONES — frontend (reales + sonido + puntito)
+// ============================================
+
+window.brigadaLoadNotifications = async function(){
+  try {
+    const { data: { session } } = await window.brigadaSupabase.auth.getSession();
+    if(!session) return { ok:false, error:"No hay sesión." };
+    const { data, error } = await window.brigadaSupabase
+      .from("notifications").select("*").eq("user_id", session.user.id)
+      .order("created_at", { ascending:false }).limit(30);
+    if(error) return { ok:false, error:error.message };
+    return { ok:true, notifications: data || [] };
+  } catch(e){ return { ok:false, error:e.message }; }
+};
+
+window.brigadaUpdateBell = async function(){
+  try {
+    const bell = document.getElementById("brigadaBell") || document.querySelector(".top-bell");
+    if(!bell) return;
+    const { data: { session } } = await window.brigadaSupabase.auth.getSession();
+    if(!session) return;
+    const { count } = await window.brigadaSupabase
+      .from("notifications").select("*", { count:"exact", head:true })
+      .eq("user_id", session.user.id).eq("read", false);
+    let badge = bell.querySelector(".brigada-notif-badge");
+    if(count && count > 0){
+      if(!badge){
+        badge = document.createElement("span");
+        badge.className = "brigada-notif-badge";
+        badge.style.cssText = "position:absolute;top:-5px;right:-5px;min-width:18px;height:18px;padding:0 4px;background:#d9480f;color:#fff;border-radius:9px;font-size:11px;line-height:18px;text-align:center;font-family:'JetBrains Mono',monospace;font-weight:600;box-shadow:0 0 0 2px var(--paper)";
+        bell.style.position = "relative";
+        bell.appendChild(badge);
+      }
+      badge.textContent = count > 9 ? "9+" : String(count);
+    } else if(badge){
+      badge.remove();
+    }
+  } catch(e){ console.error("updateBell:", e); }
+};
+
+window.brigadaMarkAllRead = async function(){
+  try {
+    const { data: { session } } = await window.brigadaSupabase.auth.getSession();
+    if(!session) return;
+    await window.brigadaSupabase.from("notifications")
+      .update({ read:true }).eq("user_id", session.user.id).eq("read", false);
+  } catch(e){ console.error("markAllRead:", e); }
+};
+
+window.brigadaOpenNotifications = async function(){
+  const isStartup = authState.user && ["startup","hire"].includes(authState.user.type);
+  const title = isStartup ? "Notificaciones de tu startup" : "Tus notificaciones";
+  const res = await window.brigadaLoadNotifications();
+  const list = (res && res.ok) ? res.notifications : [];
+  const itemsHtml = list.length
+    ? list.map(function(n){
+        return '<div class="notification-item" style="'+(n.read ? '' : 'background:rgba(217,72,15,.06)')+'"><strong>'+(n.title||'')+'</strong><p>'+(n.body||'')+'</p><span>'+window.brigadaTimeAgo(n.created_at)+'</span></div>';
+      }).join("")
+    : '<div class="notification-item"><strong>Sin notificaciones todavía</strong><p>Aquí verás aplausos, comentarios, solicitudes y mensajes nuevos.</p></div>';
+  document.getElementById("modalContent").innerHTML = '<button class="modal-close" data-action="close-modal">×</button>'+
+    '<h3>'+title+'</h3>'+
+    '<div class="modal-sub">Aquí verás solicitudes, mensajes, reacciones y comentarios importantes.</div>'+
+    '<div class="notification-list">'+itemsHtml+'</div>'+
+    '<button class="btn" style="width:100%;margin-top:14px" data-action="chat">Ver mensajes</button>';
+  if(typeof openModalBox === "function") openModalBox();
+  await window.brigadaMarkAllRead();
+  await window.brigadaUpdateBell();
+};
+
+window.brigadaPlayNotifSound = function(){
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if(!Ctx) return;
+    if(!window._brigadaAudioCtx) window._brigadaAudioCtx = new Ctx();
+    const ctx = window._brigadaAudioCtx;
+    if(ctx.state === "suspended") ctx.resume();
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    o.type = "sine";
+    o.frequency.setValueAtTime(880, ctx.currentTime);
+    o.frequency.setValueAtTime(1175, ctx.currentTime + 0.12);
+    g.gain.setValueAtTime(0.0001, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.16, ctx.currentTime + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.35);
+    o.start(ctx.currentTime);
+    o.stop(ctx.currentTime + 0.37);
+  } catch(e){}
+};
+
+window._brigadaNotifChannel = null;
+window.brigadaStartNotificationsRealtime = async function(){
+  try {
+    if(!window.brigadaSupabase || !window.brigadaSupabase.channel) return;
+    if(window._brigadaNotifChannel) return;
+    const { data: { session } } = await window.brigadaSupabase.auth.getSession();
+    if(!session) return;
+    const myId = session.user.id;
+    const ch = window.brigadaSupabase
+      .channel("brigada-notifs")
+      .on("postgres_changes", { event:"INSERT", schema:"public", table:"notifications", filter:"user_id=eq."+myId }, function(){
+        if(window.brigadaPlayNotifSound) window.brigadaPlayNotifSound();
+        if(window.brigadaUpdateBell) window.brigadaUpdateBell();
+        if(typeof showToast === "function") showToast("🔔 Tienes una nueva notificación");
+      })
+      .subscribe();
+    window._brigadaNotifChannel = ch;
+    window.brigadaUpdateBell();
+    console.log("✅ Tiempo real de notificaciones activo");
+  } catch(e){ console.error("startNotifRealtime:", e); }
+};
   function convertPublicationToOpportunity(pub){
   // Convierte una publicación del talento al formato esperado por el dashboard.
   // CRÍTICO: usa los datos del AUTOR guardados DENTRO de la publicación (pub.author),
@@ -5746,7 +5858,7 @@ async function logoutUser(){
   showHome();
 }
 function requireAuth(){if(!authState.isAuthenticated){openModal("login");return false}return true}
-function showAppDashboard(){if(!requireAuth())return;hideAll();setActiveNav("dashboard");$("appShell").classList.remove("hidden");$("appShell").classList.add("active");if(window.brigadaRefreshAllPublications)window.brigadaRefreshAllPublications();if(window.brigadaRefreshAllJobs)window.brigadaRefreshAllJobs();if(window.brigadaRefreshSharedRequests)window.brigadaRefreshSharedRequests();if(window.brigadaStartRealtime)window.brigadaStartRealtime();renderDashboard();scrollTo(0,0)}
+function showAppDashboard(){if(!requireAuth())return;hideAll();setActiveNav("dashboard");$("appShell").classList.remove("hidden");$("appShell").classList.add("active");if(window.brigadaRefreshAllPublications)window.brigadaRefreshAllPublications();if(window.brigadaRefreshAllJobs)window.brigadaRefreshAllJobs();if(window.brigadaRefreshSharedRequests)window.brigadaRefreshSharedRequests();if(window.brigadaStartRealtime)window.brigadaStartRealtime();if(window.brigadaStartNotificationsRealtime)window.brigadaStartNotificationsRealtime();if(window.brigadaStartNotificationsRealtime)window.brigadaStartNotificationsRealtime();renderDashboard();scrollTo(0,0)}
 function showAppDiscover(){if(!requireAuth())return;hideAll();setActiveNav("discover");$("discoverPage").classList.remove("hidden");$("discoverPage").classList.add("active");renderSubfilters();renderResults();scrollTo(0,0)}
 function showPartnersPage(){
   // [PARTNERS DESHABILITADO - Para reactivar en el futuro: borrar estas 2 líneas]
@@ -9860,7 +9972,7 @@ else if(a==="do-login") window.handleLogin();
   else if(a==="submit-job") submitJob();
   else if(a==="update-job") updateJob(btn.dataset.id);
   else if(a==="edit-job") openJobModal(btn.dataset.id);
-  else if(a==="notifications") openNotifications();
+  else if(a==="notifications") window.brigadaOpenNotifications();
   else if(a==="copy-contact-email") copyContactEmail();
   else if(a==="filter-my-jobs") filterMyJobs(btn.dataset.status);
   else if(a==="toggle-job-detail") toggleJobDetail(btn.dataset.job,btn.dataset.type);
