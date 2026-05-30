@@ -5623,7 +5623,7 @@ window.brigadaRefreshStories = async function(){
         photoUrl: row.photo_url || "",
         claps: Math.max((row.claps_count || 0) - (row.iClapped ? 1 : 0), 0),
         comments: cms.map(function(c){
-          return { id: c.id, mine: (myId && c.user_id === myId), author: c.author_name || "Usuario", role: c.author_role || "", text: c.content || "", timeAgo: window.brigadaTimeAgo(c.created_at) };
+          return { id: c.id, uid: c.user_id, mine: (myId && c.user_id === myId), author: c.author_name || "Usuario", role: c.author_role || "", text: c.content || "", timeAgo: window.brigadaTimeAgo(c.created_at) };
         })
       });
     });
@@ -6069,6 +6069,64 @@ window.brigadaToggleSaveFeedback = async function(postId){
       showToast("Guardado. 📌");
     }
     if(typeof renderFeedback === "function") renderFeedback();
+  } catch(e){ showToast("Error: " + e.message); }
+};
+  // ============================================
+// PERFILES — abrir el perfil real de quien comenta/responde
+// ============================================
+window.brigadaViewUserProfile = async function(uid, fallbackName, fallbackRole){
+  try {
+    if(!uid){
+      if((fallbackRole||"").toLowerCase().indexOf("startup")>=0){ if(typeof showStartupProfile==="function") showStartupProfile(fallbackName); }
+      else { if(typeof showPersonProfile==="function") showPersonProfile(fallbackName); }
+      return;
+    }
+    const { data: { session } } = await window.brigadaSupabase.auth.getSession();
+    if(session && session.user.id === uid){ if(typeof showMyProfile==="function") showMyProfile(); return; }
+    const { data: u, error } = await window.brigadaSupabase.from("users").select("id,name,city,country,bio,type").eq("id", uid).single();
+    if(error || !u){ showToast("No se pudo abrir el perfil."); return; }
+    const isStartup = (u.type === "startup" || u.type === "hire");
+    if(isStartup){
+      let s = {};
+      try { const r = await window.brigadaSupabase.from("startup_profiles").select("stage,what_does,problem,vision,team_type").eq("user_id", uid).single(); s = r.data || {}; } catch(_){}
+      const opp = {
+        startup: u.name || "Startup",
+        meta: [u.city, s.stage].filter(Boolean).join(" · "),
+        desc: u.bio || s.what_does || "",
+        niche: s.what_does || "",
+        problem: s.problem || "",
+        value: s.vision || "",
+        stage: s.stage || "",
+        teamSize: s.team_type || "",
+        tags: []
+      };
+      hideAll();
+      renderStartupProfile(opp);
+      $("startupProfilePage").classList.remove("hidden");
+      $("startupProfilePage").classList.add("active");
+      scrollTo(0,0);
+    } else {
+      let t = {};
+      try { const r = await window.brigadaSupabase.from("talent_profiles").select("skills,areas,linkedin,experience,motivation,problem_solved,life_goals").eq("user_id", uid).single(); t = r.data || {}; } catch(_){}
+      const person = {
+        startup: u.name || "Persona",
+        meta: [u.city, "Talento"].filter(Boolean).join(" · "),
+        role: "Talento",
+        desc: u.bio || "",
+        offer: "",
+        linkedin: t.linkedin || "",
+        tags: t.skills || t.areas || [],
+        experience: t.experience || "",
+        motivation: t.motivation || "",
+        problemSolved: t.problem_solved || "",
+        lifeGoals: t.life_goals || ""
+      };
+      hideAll();
+      renderPersonProfile(person);
+      $("personProfilePage").classList.remove("hidden");
+      $("personProfilePage").classList.add("active");
+      scrollTo(0,0);
+    }
   } catch(e){ showToast("Error: " + e.message); }
 };
   function convertPublicationToOpportunity(pub){
@@ -6890,9 +6948,9 @@ function renderStories(){
 
       ${totalCommentsHere > 0 ? `<div class="day-comments-thread">
         ${commentsToShow.map(c => `<div class="day-comment-item">
-          <div class="day-comment-avatar">${c.author.split(" ").map(w=>w[0]).slice(0,2).join("").toUpperCase()}</div>
+          <div class="day-comment-avatar" data-action="view-author" data-uid="${c.uid||''}" data-name="${c.author}" data-role="${c.role}" style="cursor:pointer">${c.author.split(" ").map(w=>w[0]).slice(0,2).join("").toUpperCase()}</div>
           <div class="day-comment-bubble" style="position:relative">
-            <div class="day-comment-meta"><strong>${c.author}</strong><span>${c.role} · ${c.timeAgo}</span></div>
+            <div class="day-comment-meta"><strong data-action="view-author" data-uid="${c.uid||''}" data-name="${c.author}" data-role="${c.role}" style="cursor:pointer">${c.author}</strong><span>${c.role} · ${c.timeAgo}</span></div>
             <p data-c="${c.id}">${c.text}</p>${c.mine ? `<button type="button" onclick="window.brigadaToggleCommentMenu(this,'${c.id}',event)" style="position:absolute;top:8px;right:10px;background:none;border:0;color:var(--soft);cursor:pointer;font-size:18px;line-height:1;padding:2px 4px">⋯</button>` : ""}
           </div>
         </div>`).join("")}
@@ -10495,7 +10553,7 @@ else if(a==="do-login") window.handleLogin();
   else if(a==="toggle-story-comment") toggleStoryComment(btn.dataset.id);
   else if(a==="toggle-story-more") toggleStoryMore(Number(btn.dataset.index));
   else if(a==="toggle-story-comments-expand") toggleStoryCommentsExpand(btn.dataset.id);
-  else if(a==="story-clap") window.brigadaClapAndRefresh(btn.dataset.id); else if(a==="show-clappers") window.brigadaShowClappers(btn.dataset.id); else if(a==="show-clappers") window.brigadaShowClappers(btn.dataset.id);
+  else if(a==="story-clap") window.brigadaClapAndRefresh(btn.dataset.id); else if(a==="view-author") window.brigadaViewUserProfile(btn.dataset.uid, btn.dataset.name, btn.dataset.role); else if(a==="show-clappers") window.brigadaShowClappers(btn.dataset.id); else if(a==="show-clappers") window.brigadaShowClappers(btn.dataset.id);
   else if(a==="publish-story-comment") window.brigadaPublishComment(btn.dataset.id); else if(a==="delete-comment") window.brigadaDeleteComment(btn.dataset.id); else if(a==="edit-comment") window.brigadaEditComment(btn.dataset.id); else if(a==="delete-comment") window.brigadaDeleteComment(btn.dataset.id); else if(a==="edit-comment") window.brigadaEditComment(btn.dataset.id);
   else if(a==="story-save") saveStory(Number(btn.dataset.index)); else if(a==="brigada-save") window.brigadaToggleSaveStory(btn.dataset.id); else if(a==="saved-view") window.brigadaToggleSavedView(btn.dataset.on==="1");
   else if(a==="open-feedback") openFeedbackModal(); else if(a==="brigada-save-fb") window.brigadaToggleSaveFeedback(btn.dataset.id);
