@@ -5696,6 +5696,91 @@ document.addEventListener("click", function(){
   var menu = document.getElementById("brigadaCommentMenu");
   if(menu && menu.style.display === "block"){ menu.style.display = "none"; window.brigadaCommentMenuId = null; }
 });
+  // ============================================
+// FEEDBACK — preguntas reales (publicar / listar / borrar)
+// ============================================
+
+window.brigadaCreateFeedback = async function(opts){
+  try {
+    const { data: { session } } = await window.brigadaSupabase.auth.getSession();
+    if(!session) return { ok:false, error:"No hay sesión." };
+    const u = authState.user || {};
+    const isAnon = !!opts.isAnon;
+    const feed = opts.feed;
+    const author = isAnon ? "Anónimo" : (u.name || "Usuario");
+    const meta = isAnon
+      ? (feed==="people" ? "Persona · Privado" : "Startup · Privado")
+      : (feed==="people" ? ("Persona · " + (u.city || "Lima")) : ("Startup · " + (u.city || "Lima")));
+    const { data, error } = await window.brigadaSupabase.from("feedback_posts").insert({
+      user_id: session.user.id, feed: feed, author_name: author, author_meta: meta,
+      title: opts.title, body: opts.body || "", is_anonymous: isAnon
+    }).select().single();
+    if(error) return { ok:false, error:error.message };
+    return { ok:true, post:data };
+  } catch(e){ return { ok:false, error:e.message }; }
+};
+
+window.brigadaLoadFeedback = async function(){
+  try {
+    const { data: { session } } = await window.brigadaSupabase.auth.getSession();
+    const myId = session ? session.user.id : null;
+    const { data, error } = await window.brigadaSupabase.from("feedback_posts")
+      .select("*").order("created_at", { ascending:false });
+    if(error) return { ok:false, error:error.message };
+    return { ok:true, posts:data || [], myId:myId };
+  } catch(e){ return { ok:false, error:e.message }; }
+};
+
+window.brigadaRefreshFeedback = async function(){
+  try {
+    const res = await window.brigadaLoadFeedback();
+    if(!res || !res.ok){ console.error("refreshFeedback:", res && res.error); return; }
+    feedbackPosts.length = 0;
+    (res.posts || []).forEach(function(p){
+      feedbackPosts.push({
+        id: p.id,
+        feed: p.feed,
+        tag: "",
+        author: p.author_name || "Usuario",
+        meta: p.author_meta || "",
+        title: p.title || "",
+        body: p.body || "(sin contexto)",
+        answer: "Aún no hay respuestas. Sé el primero en responder.",
+        cta: p.feed==="people" ? "Ver perfil" : "Ver startup",
+        mine: (res.myId && p.user_id === res.myId),
+        isAnonymous: !!p.is_anonymous
+      });
+    });
+    if(typeof renderFeedback === "function") renderFeedback();
+  } catch(e){ console.error("refreshFeedback excepción:", e); }
+};
+
+window.brigadaSubmitFeedback = async function(feed){
+  try {
+    const titleEl = document.getElementById("fbTitle");
+    const contextEl = document.getElementById("fbContext");
+    const title = (titleEl ? titleEl.value : "").trim();
+    const context = (contextEl ? contextEl.value : "").trim();
+    if(!title){ showToast("Escribe tu pregunta antes de publicar."); return; }
+    const privacyBtn = document.querySelector(".privacy-toggle-btn.active");
+    const isAnon = privacyBtn && privacyBtn.dataset.mode === "anon";
+    const res = await window.brigadaCreateFeedback({ feed:feed, title:title, body:context, isAnon:isAnon });
+    if(!res.ok){ showToast("No se pudo publicar: " + res.error); return; }
+    if(typeof closeModal === "function") closeModal();
+    state.feedbackFilter = "mine";
+    await window.brigadaRefreshFeedback();
+    showToast("Pregunta publicada. La verás en \"Mis preguntas\".");
+  } catch(e){ showToast("Error: " + e.message); }
+};
+
+window.brigadaDeleteFeedback = async function(postId){
+  try {
+    const { error } = await window.brigadaSupabase.from("feedback_posts").delete().eq("id", postId);
+    if(error){ showToast("No se pudo eliminar: " + error.message); return; }
+    showToast("Pregunta eliminada.");
+    await window.brigadaRefreshFeedback();
+  } catch(e){ showToast("Error: " + e.message); }
+};
   function convertPublicationToOpportunity(pub){
   // Convierte una publicación del talento al formato esperado por el dashboard.
   // CRÍTICO: usa los datos del AUTOR guardados DENTRO de la publicación (pub.author),
@@ -6666,7 +6751,7 @@ function toggleFeedbackAnswer(index,feed){
   if(box) box.classList.toggle("active");
 }
 
-function showFeedbackPage(){if(!requireAuth())return;hideAll();setActiveNav("feedback");$("feedbackPage").classList.remove("hidden");$("feedbackPage").classList.add("active");renderFeedback();scrollTo(0,0)}
+function showFeedbackPage(){if(!requireAuth())return;hideAll();setActiveNav("feedback");$("feedbackPage").classList.remove("hidden");$("feedbackPage").classList.add("active");if(window.brigadaRefreshFeedback){window.brigadaRefreshFeedback();}else{renderFeedback();}scrollTo(0,0)}
 function showRequestsPage(){state.chatFilter = "requests"; showChatPage();}
 function showChatPage(id=null){
   if(!requireAuth())return;
@@ -7711,7 +7796,7 @@ function renderFeedback(){
     : emptyAspirational;
 
   list.innerHTML = filterBar + (posts.length === 0 ? emptyMessage : posts.map((p,i)=>`<article class="feedback-card ${p.mine?'mine':''}">
-    ${p.mine ? `<button class="feedback-delete-btn" data-action="delete-feedback" data-index="${i}" data-feed="${feed}" title="Eliminar mi pregunta" aria-label="Eliminar mi pregunta"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>` : ""}
+    ${p.mine ? `<button class="feedback-delete-btn" data-action="brigada-del-feedback" data-id="${p.id}" title="Eliminar mi pregunta" aria-label="Eliminar mi pregunta"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>` : ""}
     ${p.mine ? `<div class="mine-banner">Tu pregunta · publicada</div>` : ""}
     <div class="feedback-card-head">
       <button class="feedback-author" data-action="${p.feed==="startups"?"view-startup":"view-person"}" ${p.feed==="startups" ? `data-startup-name="${p.author}" data-is-person="false"` : `data-person-name="${p.author}"`}>
@@ -10086,13 +10171,13 @@ if(window.brigadaCreateApplication && targetOpp && targetOpp.id){
     document.querySelectorAll(".privacy-toggle-btn").forEach(b => b.classList.toggle("active", b.dataset.mode === btn.dataset.mode));
   }
   else if(a==="publish-feedback") {
-    publishFeedback(btn.dataset.feed);
+    if(window.brigadaSubmitFeedback){window.brigadaSubmitFeedback(btn.dataset.feed);}else{if(window.brigadaSubmitFeedback){window.brigadaSubmitFeedback(btn.dataset.feed);}else{if(window.brigadaSubmitFeedback){window.brigadaSubmitFeedback(btn.dataset.feed);}else{publishFeedback(btn.dataset.feed);}}}
   }
   else if(a==="feedback-filter") {
     state.feedbackFilter = btn.dataset.filter;
     renderFeedback();
   }
-  else if(a==="delete-feedback") {
+  else if(a==="brigada-del-feedback"){ if(confirm("¿Eliminar tu pregunta?")) window.brigadaDeleteFeedback(btn.dataset.id); }   else if(a==="brigada-del-feedback"){ if(confirm("¿Eliminar tu pregunta?")) window.brigadaDeleteFeedback(btn.dataset.id); }   else if(a==="brigada-del-feedback"){ if(confirm("¿Eliminar tu pregunta?")) window.brigadaDeleteFeedback(btn.dataset.id); }   else if(a==="delete-feedback") {
     confirmDeleteFeedback(btn.dataset.feed, Number(btn.dataset.index) || 0);
   }
   else if(a==="confirm-delete-feedback") {
