@@ -9704,7 +9704,7 @@ function showRegisterCodeStep(type){
         <input id="registerPasswordInput" type="password" minlength="6" placeholder="••••••••">
       </div>
     </div>
-    <button class="btn" style="width:100%" data-action="validate-register-code" data-type="${type}">Continuar</button>
+    <button class="btn" style="display:block;margin:22px auto 0;padding:14px 46px;font-size:.95rem" data-action="validate-register-code" data-type="${type}">Continuar</button>
     <button class="card-link" style="margin-top:12px" data-action="choose-account" data-account-type="${type}">Cambiar correo</button>
   </div>`;
 
@@ -9803,7 +9803,7 @@ function setAccountType(type){
         <input id="registerEmailInput" type="email" placeholder="tu@correo.com">
       </div>
     </div>
-    <button class="btn" style="width:100%" data-action="send-register-code" data-type="${type}">Continuar</button>
+    <button class="btn" style="display:block;margin:22px auto 0;padding:14px 46px;font-size:.95rem" data-action="send-register-code" data-type="${type}">Continuar</button>
   </div>`;
 }
 
@@ -10343,7 +10343,7 @@ async function finalizeOnboarding(type){
 
 const modalTemplates={
 login:`<button class="modal-close" data-action="close-modal">×</button><h3>Iniciar sesión</h3><div class="modal-sub">Accede a tu cuenta de <span class="brigada-mark">Brigada</span>.</div><div class="form-section"><div class="form-grid"><div class="field-full"><div class="field-label">Correo electrónico</div><input id="loginEmailInput" type="email" placeholder="tu@correo.com"></div><div class="field-full"><div class="field-label">Contraseña</div><input id="loginPasswordInput" type="password" placeholder="••••••••"></div></div><button class="btn" style="width:100%;margin-top:8px" data-action="do-login">Entrar</button></div>`,
-register:`<button class="modal-close" data-action="close-modal">×</button><h3>Crear cuenta</h3><div class="modal-sub">Elige una opción y empieza con tu correo.</div><div class="account-picker"><button class="account-option" data-account-type="talent" data-action="choose-account"><strong>Quiero unirme a un emprendimiento</strong><span>Para personas que quieren sumarse a un emprendimiento.</span></button><button class="account-option" data-account-type="startup" data-action="choose-account"><strong>Tengo un emprendimiento</strong><span>Para founders que quieren reclutar talento, contar avances y pedir consejos.</span></button></div><div id="accountForm"></div><p class="modal-note">En el futuro habrá una opción específica para inversionistas.</p>`,
+register:`<button class="modal-close" data-action="close-modal">×</button><h3>Crear cuenta</h3><div class="modal-sub">Elige una opción y empieza con tu correo.</div><div class="account-picker"><button class="account-option" data-account-type="talent" data-action="choose-account"><strong>Quiero unirme a un emprendimiento, empresa o startup</strong></button><button class="account-option" data-account-type="startup" data-action="choose-account"><strong>Tengo un emprendimiento, empresa o startup</strong><span>Recluta talento.</span></button></div><div id="accountForm"></div>`,
 partner:`<button class="modal-close" data-action="close-modal">×</button><h3>Quiero ser partner y ofrecer mis servicios</h3><div class="modal-sub">Servicios jurídicos, contables, M&A, tecnológicos, financieros o de talento.</div><div class="form-section" id="partnerForm"><div class="form-title">Paso 1: valida tu correo</div><div class="form-grid"><div><div class="field-label">Correo</div><input type="email" placeholder="correo@empresa.com"></div><div><div class="field-label">Código</div><input placeholder="Ej: 482913"></div></div><button class="btn soft" style="width:100%;margin-bottom:10px" data-action="fake" data-message="Código enviado en modo demo.">Enviar código</button><button class="btn" style="width:100%" data-action="minimal-partner">Validar y continuar</button></div>`
 };
 function openModal(kind){$("modalContent").innerHTML=modalTemplates[kind];openModalBox();if(kind==="register")setAccountType("talent")}
