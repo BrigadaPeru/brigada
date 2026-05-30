@@ -553,7 +553,7 @@ footer{border-top:1px solid var(--line);padding:34px 24px}
   color:#a8770b;
   border:1px solid #ffe9a8;
 }
-.day-mood-badge.mood-hard{
+.day-mood-badge.mood-joda{ background:#eef2f7; color:#4a5b6b; border:1px solid #d8e0ea; } .story-mood-opt{ font-family:'JetBrains Mono',monospace; font-size:.74rem; padding:8px 12px; border-radius:999px; border:1px solid var(--line); background:var(--paper); color:var(--ink); cursor:pointer; } .story-mood-opt.active{ border-color:#a0522d; background:#a0522d; color:#fff; } .day-mood-badge.mood-joda{ background:#eef2f7; color:#4a5b6b; border:1px solid #d8e0ea; } .story-mood-opt{ font-family:'JetBrains Mono',monospace; font-size:.74rem; padding:8px 12px; border-radius:999px; border:1px solid var(--line); background:var(--paper); color:var(--ink); cursor:pointer; } .story-mood-opt.active{ border-color:#a0522d; background:#a0522d; color:#fff; } .day-mood-badge.mood-joda{ background:#eef2f7; color:#4a5b6b; border:1px solid #d8e0ea; } .story-mood-opt{ font-family:'JetBrains Mono',monospace; font-size:.74rem; padding:8px 12px; border-radius:999px; border:1px solid var(--line); background:var(--paper); color:var(--ink); cursor:pointer; } .story-mood-opt.active{ border-color:#a0522d; background:#a0522d; color:#fff; } .day-mood-badge.mood-joda{ background:#eef2f7; color:#4a5b6b; border:1px solid #d8e0ea; } .story-mood-opt{ font-family:'JetBrains Mono',monospace; font-size:.74rem; padding:8px 12px; border-radius:999px; border:1px solid var(--line); background:var(--paper); color:var(--ink); cursor:pointer; } .story-mood-opt.active{ border-color:#a0522d; background:#a0522d; color:#fff; } .day-mood-badge.mood-hard{
   background:#fce4ec;
   color:#b13a5a;
   border:1px solid #f4c2cf;
@@ -5371,7 +5371,7 @@ window.brigadaSubmitStory = async function(){
     stage: u.sector || "",
     title: title || "(Sin título)",
     detail: detail || "",
-    mood: "win",
+    mood: (window.brigadaStoryMood || "win"),
     photo_url: photoUrl
   });
   if(!res.ok){ showToast("No se pudo publicar: " + res.error); return; }
@@ -5963,6 +5963,16 @@ window.brigadaRenderAnswers = function(p){
     return '<div style="position:relative;border-top:1px dashed var(--line);padding:10px 24px 10px 0"><div style="font-size:.82rem;color:var(--mute);margin-bottom:3px"><strong style="color:var(--ink)">'+a.author+'</strong> · '+a.timeAgo+'</div><div style="font-size:.92rem;color:var(--ink)">'+a.content+'</div>'+dots+'</div>';
   }).join("");
   return '<div style="margin-top:8px">' + head + items + '</div>';
+};
+  // ============================================
+// FEED — selector de tipo de publicación
+// ============================================
+window.brigadaStoryMood = "win";
+window.brigadaPickMood = function(btn){
+  window.brigadaStoryMood = (btn && btn.dataset.mood) || "win";
+  var all = document.querySelectorAll("#storyMoodPicker .story-mood-opt");
+  all.forEach(function(b){ b.classList.remove("active"); });
+  if(btn) btn.classList.add("active");
 };
   function convertPublicationToOpportunity(pub){
   // Convierte una publicación del talento al formato esperado por el dashboard.
@@ -6732,8 +6742,8 @@ function renderStories(){
     const commentsToShow = showAllComments ? (s.comments || []) : (s.comments || []).slice(0, 2);
     const moreCommentsCount = totalCommentsHere - commentsToShow.length;
 
-    const moodIcon = s.mood === "win" ? "🚀" : s.mood === "learning" ? "💡" : s.mood === "hard" ? "🌧️" : "✨";
-    const moodLabel = s.mood === "win" ? "Hito" : s.mood === "learning" ? "Aprendizaje" : s.mood === "hard" ? "Lección dura" : "Historia";
+    const moodIcon = s.mood === "win" ? "🚀" : s.mood === "learning" ? "💡" : s.mood === "hard" ? "🌧️" : s.mood === "joda" ? "😎" : "✨";
+    const moodLabel = s.mood === "win" ? "Hito" : s.mood === "learning" ? "Aprendizaje" : s.mood === "hard" ? "Lección" : s.mood === "joda" ? "Joda" : "Historia";
 
     return `<article class="day-card-v2" id="story-card-${s.id}">
       <div class="day-card-v2-head">
@@ -7819,7 +7829,7 @@ function openStoryModal(){
     <h3>Publicar hito</h3>
     <div class="modal-sub">Comparte un avance real de tu startup.</div>
     <div class="form-grid">
-      <div class="field-full"><div class="field-label">Título</div><input id="storyTitleInput" placeholder="Ej: Probamos nuestro primer prototipo con usuarios reales"></div>
+      <div class="field-full"><div class="field-label">Título</div><input id="storyTitleInput" placeholder="Ej: Probamos nuestro primer prototipo con usuarios reales"></div><div class="field-full"><div class="field-label">Tipo de publicación</div><div id="storyMoodPicker" style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="story-mood-opt active" data-mood="win" onclick="window.brigadaPickMood(this)">🚀 Hito</button><button type="button" class="story-mood-opt" data-mood="learning" onclick="window.brigadaPickMood(this)">💡 Aprendizaje</button><button type="button" class="story-mood-opt" data-mood="hard" onclick="window.brigadaPickMood(this)">🌧️ Lección</button><button type="button" class="story-mood-opt" data-mood="joda" onclick="window.brigadaPickMood(this)">😎 Joda</button></div></div><div class="field-full"><div class="field-label">Tipo de publicación</div><div id="storyMoodPicker" style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="story-mood-opt active" data-mood="win" onclick="window.brigadaPickMood(this)">🚀 Hito</button><button type="button" class="story-mood-opt" data-mood="learning" onclick="window.brigadaPickMood(this)">💡 Aprendizaje</button><button type="button" class="story-mood-opt" data-mood="hard" onclick="window.brigadaPickMood(this)">🌧️ Lección</button><button type="button" class="story-mood-opt" data-mood="joda" onclick="window.brigadaPickMood(this)">😎 Joda</button></div></div>
       <div class="field-full"><div class="field-label">Imagen (opcional)</div><input type="file" accept="image/*" id="storyPhotoInput" style="display:block;width:100%;padding:10px;border:1px dashed var(--line);border-radius:12px;background:var(--paper)"></div>
       <div class="field-full"><div class="field-label">Cuéntale a todos tu hito</div><textarea id="storyDetailInput" placeholder="Cuenta el avance en simple. ¿Qué lograron? ¿Qué aprendieron? ¿Qué cambia desde ahora?" style="min-height:120px"></textarea></div>
     </div>
@@ -7854,7 +7864,7 @@ function submitStory(){
     title: title || "(Sin título)",
     detail: detail || "",
     type: "Historia",
-    mood: "win",
+    mood: (window.brigadaStoryMood || "win"),
     next: "",
     photo: "",
     profile: u.bio || "",
@@ -10382,7 +10392,7 @@ else if(a==="do-login") window.handleLogin();
   else if(a==="open-profile") openProfile(btn.dataset.id);
   else if(a==="contact") openContact(btn.dataset.id);
   else if(a==="send-contact") sendContactRequest(btn.dataset.id);
-  else if(a==="open-story") openStoryModal();
+  else if(a==="open-story"){ window.brigadaStoryMood="win"; openStoryModal(); }
   else if(a==="submit-story") window.brigadaSubmitStory();
   else if(a==="story-help") openStoryHelp(Number(btn.dataset.index));
   else if(a==="toggle-story-comment") toggleStoryComment(btn.dataset.id);
