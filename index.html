@@ -6145,6 +6145,87 @@ window.brigadaRenderAnswers = function(p){
   }).join("");
   return '<div style="margin-top:8px">' + head + items + '</div>';
 };
+  // ============================================
+// MÓVIL — barra inferior estilo app (Inicio/Día a día/Feedback/Mensajes/Menú)
+// Se adapta a cualquier celular (flex + safe-area). La compu queda igual.
+// ============================================
+(function(){
+  if(document.getElementById("bp-m2-style")) return;
+  var css=document.createElement("style"); css.id="bp-m2-style";
+  css.textContent = `
+#bpHamburger{display:none !important}
+.bp-topbrand{display:none;font-family:'Fraunces',Georgia,serif;font-style:italic;font-weight:900;font-size:1.5rem;color:var(--blue700);letter-spacing:-.04em;line-height:1;margin-right:auto}
+.bp-bottomnav{display:none}
+.bp-nav-backdrop{display:none;position:fixed;inset:0;background:rgba(20,24,30,.45);z-index:88}
+.bp-tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border:0;background:transparent;color:var(--mute);cursor:pointer;padding:4px 2px;font-family:'JetBrains Mono',monospace;font-size:.57rem;letter-spacing:.01em;transition:color .15s}
+.bp-tab svg{width:23px;height:23px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.bp-tab.active{color:#a0522d}
+.bp-tab.active svg{stroke:#a0522d}
+@media(max-width:920px){
+  body.logged-in .top{display:none !important}
+  body.logged-in{padding-top:calc(54px + env(safe-area-inset-top));padding-bottom:calc(64px + env(safe-area-inset-bottom))}
+  body.logged-in .bp-topbrand{display:block}
+  body.logged-in .bp-bottomnav{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:90;background:rgba(252,250,245,.97);backdrop-filter:blur(14px);border-top:1px solid var(--line);padding:6px 4px calc(6px + env(safe-area-inset-bottom));box-shadow:0 -4px 20px rgba(24,36,50,.06)}
+  body.logged-in .top-account-bar{top:0;left:0;right:0;width:100%;padding:calc(8px + env(safe-area-inset-top)) 14px 8px 16px;background:rgba(245,242,234,.96);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);justify-content:flex-end;gap:8px;box-sizing:border-box;z-index:86}
+  body.logged-in .top-account-chip{display:none}
+  body.logged-in .top-account-bar .btn{padding:7px 12px;font-size:.72rem}
+  body.logged-in .app-sidebar{display:flex !important;top:0;bottom:0;transform:translateX(-105%);transition:transform .28s ease;width:84%;max-width:300px;z-index:95;overflow-y:auto;box-shadow:0 0 50px rgba(0,0,0,.28);padding-top:calc(24px + env(safe-area-inset-top))}
+  body.logged-in.bp-nav-open .app-sidebar{transform:translateX(0)}
+  body.logged-in.bp-nav-open .bp-nav-backdrop{display:block}
+}
+`;
+  document.head.appendChild(css);
+
+  var I={
+    home:'<path d="M4 11l8-6 8 6"/><path d="M6 10v9h12v-9"/>',
+    feed:'<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 9h8M8 13h8M8 17h5"/>',
+    chatq:'<path d="M4 5h16v10H9l-5 4z"/>',
+    mail:'<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3.5 8l8.5 6 8.5-6"/>',
+    menu:'<line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/>'
+  };
+
+  function setup(){
+    if(document.getElementById("bpBottomNav")) return;
+    var bar=document.getElementById("topAccountBar");
+    if(bar && !document.getElementById("bpTopBrand")){
+      var brand=document.createElement("span");
+      brand.id="bpTopBrand"; brand.className="bp-topbrand"; brand.textContent="Brigada";
+      bar.insertBefore(brand, bar.firstChild);
+    }
+    var nav=document.createElement("nav");
+    nav.id="bpBottomNav"; nav.className="bp-bottomnav";
+    var tabs=[
+      {a:"dashboard",ic:"home",l:"Inicio"},
+      {a:"stories",ic:"feed",l:"Día a día"},
+      {a:"feedback",ic:"chatq",l:"Feedback"},
+      {a:"chat",ic:"mail",l:"Mensajes"},
+      {a:"__menu",ic:"menu",l:"Menú"}
+    ];
+    tabs.forEach(function(t){
+      var b=document.createElement("button");
+      b.className="bp-tab";
+      if(t.a!=="__menu") b.setAttribute("data-action",t.a);
+      b.innerHTML='<svg viewBox="0 0 24 24">'+I[t.ic]+'</svg><span>'+t.l+'</span>';
+      b.addEventListener("click",function(){
+        if(t.a==="__menu"){ document.body.classList.toggle("bp-nav-open"); return; }
+        document.body.classList.remove("bp-nav-open");
+        nav.querySelectorAll(".bp-tab").forEach(function(x){x.classList.remove("active");});
+        b.classList.add("active");
+      });
+      nav.appendChild(b);
+    });
+    document.body.appendChild(nav);
+    var f=nav.querySelector(".bp-tab"); if(f) f.classList.add("active");
+    if(!document.getElementById("bpNavBackdrop")){
+      var bd=document.createElement("div"); bd.id="bpNavBackdrop"; bd.className="bp-nav-backdrop";
+      bd.addEventListener("click",function(){document.body.classList.remove("bp-nav-open");});
+      document.body.appendChild(bd);
+    }
+    var sb=document.getElementById("appSidebar");
+    if(sb && !sb.getAttribute("data-bpclose")){ sb.setAttribute("data-bpclose","1"); sb.addEventListener("click",function(e){ if(e.target.closest(".sidebar-link")) document.body.classList.remove("bp-nav-open"); }); }
+  }
+  if(document.body){ setup(); } else { document.addEventListener("DOMContentLoaded",setup); }
+})();
   function convertPublicationToOpportunity(pub){
   // Convierte una publicación del talento al formato esperado por el dashboard.
   // CRÍTICO: usa los datos del AUTOR guardados DENTRO de la publicación (pub.author),
