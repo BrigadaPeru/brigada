@@ -5286,6 +5286,25 @@ window.brigadaClapAndRefresh = async function(id){
   if(!res || !res.ok){ console.error("clap:", res && res.error); }
   await window.brigadaRefreshStories();
 };
+  // ============================================
+// FEED — Paso 4: tiempo real (en vivo, sin recargar)
+// ============================================
+
+window._brigadaStoriesChannel = null;
+window.brigadaStartStoriesRealtime = function(){
+  try {
+    if(!window.brigadaSupabase || !window.brigadaSupabase.channel) return;
+    if(window._brigadaStoriesChannel) return;
+    const ch = window.brigadaSupabase
+      .channel("brigada-stories")
+      .on("postgres_changes", { event: "*", schema: "public", table: "stories" }, function(){ if(window.brigadaRefreshStories) window.brigadaRefreshStories(); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "story_claps" }, function(){ if(window.brigadaRefreshStories) window.brigadaRefreshStories(); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "story_comments" }, function(){ if(window.brigadaRefreshStories) window.brigadaRefreshStories(); })
+      .subscribe();
+    window._brigadaStoriesChannel = ch;
+    console.log("✅ Tiempo real de historias activo");
+  } catch(e){ console.error("❌ brigadaStartStoriesRealtime:", e); }
+};
   function convertPublicationToOpportunity(pub){
   // Convierte una publicación del talento al formato esperado por el dashboard.
   // CRÍTICO: usa los datos del AUTOR guardados DENTRO de la publicación (pub.author),
@@ -6244,7 +6263,7 @@ function saveStory(index){
   showToast(s ? `Historia de ${s.startup} guardada para revisar después.` : "Historia guardada.");
 }
 
-function showStoriesPage(){if(!requireAuth())return;hideAll();setActiveNav("stories");$("storiesPage").classList.remove("hidden");$("storiesPage").classList.add("active");window.brigadaRefreshStories();scrollTo(0,0)}
+function showStoriesPage(){if(!requireAuth())return;hideAll();setActiveNav("stories");$("storiesPage").classList.remove("hidden");$("storiesPage").classList.add("active");window.brigadaRefreshStories();if(window.brigadaStartStoriesRealtime)window.brigadaStartStoriesRealtime();scrollTo(0,0)}
 
 function setFeedbackFeed(feed){
   state.feedbackFeed=feed||"startups";
