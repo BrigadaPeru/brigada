@@ -3698,8 +3698,8 @@ body.user-talent .account-tab.personal-only{
 
 <section id="publicHome">
   <header class="hero">
-    <div class="eyebrow">Acceso para talento y emprendimientos</div>
-    <h1 class="headline">Encuentra con quién <em>construir</em> tu emprendimiento en Perú.</h1>
+    <div class="eyebrow">Acceso para talento, emprendimientos, empresas y startups</div>
+    <h1 class="headline">Encuentra con quién <em>construir</em> tu emprendimiento, empresa o startup en Perú.</h1>
     <p class="lede">Brigada conecta personas que quieren unirse a un emprendimiento, empresa o startup con quienes buscan talento. Simple, privado y con conversaciones de calidad.</p>
     <div class="hero-actions"><button class="btn" data-action="register">Crear cuenta</button></div>
   </header>
@@ -3761,7 +3761,7 @@ body.user-talent .account-tab.personal-only{
 <section class="page" id="storiesPage">
   <div class="app-hero day-hero">
     <div class="eyebrow">Día a día</div>
-    <h1>El día a día de los emprendimientos.</h1>
+    <h1>El día a día de los emprendimientos, empresas y startups.</h1>
     <p>Avances reales, fotos, aprendizajes y próximos pasos.</p>
     <div class="hero-actions" id="storyPublishAction"></div>
   </div>
@@ -3776,7 +3776,7 @@ body.user-talent .account-tab.personal-only{
   <div class="app-hero">
     <div class="eyebrow">Consejos</div>
     <h1>Consejos útiles, sin ruido.</h1>
-    <p>Ayuda a otros emprendimientos o mejora tu perfil para encontrar mejor encaje.</p>
+    <p>Ayuda a otros emprendimientos, empresas y startups, o mejora tu perfil para encontrar mejor encaje.</p>
     <div class="hero-actions" id="feedbackAction"></div>
   </div>
 
@@ -7600,7 +7600,7 @@ function renderDashboard(){
         </article>`).join("") || (() => {
           const isStartupUser = ["startup","hire"].includes(u.type);
           const titleText = isStartupUser
-            ? "Sé uno de los primeros emprendimientos en la historia de Brigada."
+            ? "Sé uno de los primeros emprendimientos, empresas o startups en la historia de Brigada."
             : "Sé parte de la primera ola de talento emprendedor peruano.";
           return `<div class="empty-state-aspirational">
             <div class="empty-state-title">${titleText}</div>
@@ -7988,13 +7988,13 @@ function renderMyProfile(){
 
   const startupProfile = `<div class="profile-questions">
     <div class="profile-question-card">
-      <h3>Sobre el emprendimiento, en una línea</h3>
+      <h3>Sobre tu emprendimiento, empresa o startup, en una línea</h3>
       <p>Una frase corta. Aparecerá visible en la parte superior de tu perfil.</p>
       <input id="profileBioInput" data-field="bio" placeholder="Ej: Telemedicina simple para zonas con baja conectividad">
     </div>
 
     <div class="profile-question-card">
-      <h3>1. ¿Qué hace tu emprendimiento?</h3>
+      <h3>1. ¿Qué hace tu emprendimiento, empresa o startup?</h3>
       <p>Explícalo en simple. Qué construyen y para quién.</p>
       <textarea data-field="whatDoes" placeholder="Ej: Ayudamos a postas rurales a registrar y derivar pacientes sin procesos complejos."></textarea>
     </div>
@@ -8850,7 +8850,7 @@ function renderMyJobs(){
     const filterLabel = myJobsFilter === "active" ? "activos" : "finalizados";
     grid.innerHTML = `<div class="empty-state-aspirational" style="grid-column:1 / -1">
       <div class="empty-state-title">Aún no tienes puestos ${filterLabel}.</div>
-      <p class="empty-state-text">${myJobsFilter === "active" ? "Toca el botón \"+\" para publicar el primer puesto de tu emprendimiento." : "Aquí verás los procesos que ya cerraste."}</p>
+      <p class="empty-state-text">${myJobsFilter === "active" ? "Toca el botón \"+\" para publicar el primer puesto de tu emprendimiento, empresa o startup." : "Aquí verás los procesos que ya cerraste."}</p>
     </div>`;
     return;
   }
