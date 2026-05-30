@@ -5581,7 +5581,7 @@ window.brigadaLoadClappers = async function(storyId){
 };
 
 window.brigadaShowClappers = async function(storyId){
-  document.getElementById("modalContent").innerHTML = '<button class="modal-close" data-action="close-modal">×</button><h3>Aplausos 👏</h3><div class="modal-sub">Cargando...</div>';
+  document.getElementById("modalContent").style.maxWidth = "420px"; document.getElementById("modalContent").innerHTML = '<button class="modal-close" data-action="close-modal">×</button><h3>Aplausos 👏</h3><div class="modal-sub">Cargando...</div>';
   if(typeof openModalBox === "function") openModalBox();
   const res = await window.brigadaLoadClappers(storyId);
   const list = (res && res.ok) ? res.clappers : [];
@@ -9716,7 +9716,7 @@ partner:`<button class="modal-close" data-action="close-modal">×</button><h3>Qu
 };
 function openModal(kind){$("modalContent").innerHTML=modalTemplates[kind];openModalBox();if(kind==="register")setAccountType("talent")}
 function openModalBox(){$("modalBg").classList.add("open")}
-function closeModal(){$("modalBg").classList.remove("open")}
+function closeModal(){$("modalBg").classList.remove("open");var _m=$("modalContent");if(_m)_m.style.maxWidth=""}
 function fakeAction(m){showToast(m||"Acción demo.")}
 
 document.addEventListener("click",function(e){
