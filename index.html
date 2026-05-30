@@ -5748,7 +5748,7 @@ window.brigadaRefreshFeedback = async function(){
         answer: "Aún no hay respuestas. Sé el primero en responder.",
         cta: p.feed==="people" ? "Ver perfil" : "Ver startup",
         mine: (res.myId && p.user_id === res.myId),
-        isAnonymous: !!p.is_anonymous
+        isAnonymous: !!p.is_anonymous, uid: p.user_id
       });
     });
     if(typeof renderFeedback === "function") renderFeedback();
@@ -5831,7 +5831,7 @@ window.brigadaRefreshFeedback = async function(){
         author: a.author_name || "Usuario",
         content: a.content || "",
         timeAgo: window.brigadaTimeAgo(a.created_at),
-        mine: (res.myId && a.user_id === res.myId)
+        uid: a.user_id, mine: (res.myId && a.user_id === res.myId)
       });
     });
     if(window.brigadaLoadSavedFeedback) window.brigadaLoadSavedFeedback(); feedbackPosts.length = 0;
@@ -5848,7 +5848,7 @@ window.brigadaRefreshFeedback = async function(){
         answers: byPost[p.id] || [],
         cta: p.feed==="people" ? "Ver perfil" : "Ver startup",
         mine: (res.myId && p.user_id === res.myId),
-        isAnonymous: !!p.is_anonymous
+        isAnonymous: !!p.is_anonymous, uid: p.user_id
       });
     });
     if(typeof renderFeedback === "function") renderFeedback();
@@ -6128,6 +6128,22 @@ window.brigadaViewUserProfile = async function(uid, fallbackName, fallbackRole){
       scrollTo(0,0);
     }
   } catch(e){ showToast("Error: " + e.message); }
+};
+  // ============================================
+// FEEDBACK — autor de respuesta clickeable (perfil)
+// ============================================
+window.brigadaRenderAnswers = function(p){
+  var list = (p && p.answers) ? p.answers : [];
+  if(!list.length){
+    return '<div class="highlight"><strong>Sé el primero en responder</strong><p>Aún no hay respuestas. Aporta una idea concreta y útil.</p></div>';
+  }
+  var head = '<strong style="display:block;font-size:.9rem;margin:10px 0 4px">' + list.length + ' ' + (list.length===1?"respuesta":"respuestas") + '</strong>';
+  var items = list.map(function(a){
+    var dots = a.mine ? '<button type="button" onclick="window.brigadaToggleAnswerMenu(this,\''+a.id+'\',event)" style="position:absolute;top:8px;right:6px;background:none;border:0;color:var(--soft);cursor:pointer;font-size:18px;line-height:1;padding:2px 4px">⋯</button>' : '';
+    var authorHtml = '<strong data-action="view-author" data-uid="'+(a.uid||'')+'" data-name="'+a.author+'" data-role="" style="color:var(--ink);cursor:pointer">'+a.author+'</strong>';
+    return '<div style="position:relative;border-top:1px dashed var(--line);padding:10px 24px 10px 0"><div style="font-size:.82rem;color:var(--mute);margin-bottom:3px">'+authorHtml+' · '+a.timeAgo+'</div><div style="font-size:.92rem;color:var(--ink)">'+a.content+'</div>'+dots+'</div>';
+  }).join("");
+  return '<div style="margin-top:8px">' + head + items + '</div>';
 };
   function convertPublicationToOpportunity(pub){
   // Convierte una publicación del talento al formato esperado por el dashboard.
@@ -8147,7 +8163,7 @@ function renderFeedback(){
     ${p.mine ? `<button class="feedback-delete-btn" data-action="brigada-del-feedback" data-id="${p.id}" title="Eliminar mi pregunta" aria-label="Eliminar mi pregunta"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>` : ""}
     ${p.mine ? `<div class="mine-banner">Tu pregunta · publicada</div>` : ""}
     <div class="feedback-card-head">
-      <button class="feedback-author" data-action="${p.feed==="startups"?"view-startup":"view-person"}" ${p.feed==="startups" ? `data-startup-name="${p.author}" data-is-person="false"` : `data-person-name="${p.author}"`}>
+      <button class="feedback-author"${p.isAnonymous ? ' style="cursor:default"' : ` data-action="view-author" data-uid="${p.uid||''}" data-name="${p.author}" data-role="${p.feed==='startups'?'startup':'talento'}" style="cursor:pointer"`}>
         <strong>${p.author}</strong>
         <span>${p.meta}</span>
       </button>
