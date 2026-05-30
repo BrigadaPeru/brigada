@@ -5208,7 +5208,7 @@ window.brigadaRefreshStories = async function(){
     (res.stories || []).forEach(function(row){
       state.userClaps[row.id] = !!row.iClapped;
       startupStories.push({
-        id: row.id,
+        id: row.id, uid: row.user_id, uid: row.user_id,
         startup: row.startup_name || "Startup",
         initials: row.initials || "??",
         stage: row.stage || "",
@@ -5389,7 +5389,7 @@ window.brigadaRefreshStories = async function(){
     (res.stories || []).forEach(function(row){
       state.userClaps[row.id] = !!row.iClapped;
       startupStories.push({
-        id: row.id,
+        id: row.id, uid: row.user_id, uid: row.user_id,
         startup: row.startup_name || "Startup",
         initials: row.initials || "??",
         stage: row.stage || "",
@@ -5610,7 +5610,7 @@ window.brigadaRefreshStories = async function(){
       state.userClaps[row.id] = !!row.iClapped;
       var cms = (row.comments || []).slice().reverse();
       startupStories.push({
-        id: row.id,
+        id: row.id, uid: row.user_id, uid: row.user_id,
         startup: row.startup_name || "Startup",
         initials: row.initials || "??",
         stage: row.stage || "",
@@ -6092,7 +6092,7 @@ window.brigadaViewUserProfile = async function(uid, fallbackName, fallbackRole){
       const opp = {
         startup: u.name || "Startup",
         meta: [u.city, s.stage].filter(Boolean).join(" · "),
-        desc: u.bio || s.what_does || "",
+        desc: u.bio || "Esta startup aún no ha completado su perfil.",
         niche: s.what_does || "",
         problem: s.problem || "",
         value: s.vision || "",
@@ -6112,7 +6112,7 @@ window.brigadaViewUserProfile = async function(uid, fallbackName, fallbackRole){
         startup: u.name || "Persona",
         meta: [u.city, "Talento"].filter(Boolean).join(" · "),
         role: "Talento",
-        desc: u.bio || "",
+        desc: u.bio || "Esta persona aún no ha completado su perfil.",
         offer: "",
         linkedin: t.linkedin || "",
         tags: t.skills || t.areas || [],
@@ -6902,7 +6902,7 @@ function renderStories(){
 
     return `<article class="day-card-v2" id="story-card-${s.id}">
       <div class="day-card-v2-head">
-        <button class="day-startup-pill" data-action="view-startup" data-startup-name="${s.startup}" data-index="${i}">
+        <button class="day-startup-pill" data-action="view-author" data-uid="${s.uid||''}" data-name="${s.startup}" data-role="startup" data-index="${i}">
           <span class="day-startup-avatar">${s.initials}</span>
           <span class="day-startup-text">
             <span class="day-startup-name">${s.startup}</span>
