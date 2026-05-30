@@ -7690,7 +7690,12 @@ function renderProfileSkillTags(){
   wrap.innerHTML = skills.map(s=>`<span class="tag">${s}</span>`).join("");
 }
 function getSelectedProfileSkills(){
-  return Array.from(document.querySelectorAll(".skill-option.active")).map(btn=>btn.dataset.skill);
+  var arr = Array.from(document.querySelectorAll(".skill-option.active")).map(function(btn){return btn.dataset.skill;});
+  var otroActive = arr.indexOf("Otro")!==-1;
+  arr = arr.filter(function(s){return s!=="Otro";});
+  var _oi=document.getElementById("skillOtherInput");
+  if(otroActive && _oi && _oi.value.trim()) arr.push(_oi.value.trim());
+  return arr;
 }
 
 
@@ -7952,19 +7957,23 @@ function renderMyProfile(){
       <h3>4. ¿A qué área o habilidades quieres asociar tu perfil?</h3>
       <p>Elige una o varias. Estas etiquetas aparecerán en tu perfil para que los emprendimientos te encuentren mejor.</p>
       <div class="skill-picker">
-        <button type="button" class="skill-option" data-action="toggle-skill" data-skill="Diseño">Diseño</button>
-        <button type="button" class="skill-option" data-action="toggle-skill" data-skill="Software">Software</button>
-        <button type="button" class="skill-option" data-action="toggle-skill" data-skill="Industrial">Industrial</button>
-        <button type="button" class="skill-option" data-action="toggle-skill" data-skill="Agrícola">Agrícola</button>
-        <button type="button" class="skill-option" data-action="toggle-skill" data-skill="Minería">Minería</button>
-        <button type="button" class="skill-option" data-action="toggle-skill" data-skill="Tecnología">Tecnología</button>
-        <button type="button" class="skill-option" data-action="toggle-skill" data-skill="Electrónica">Electrónica</button>
-        <button type="button" class="skill-option" data-action="toggle-skill" data-skill="UX/UI">UX/UI</button>
-        <button type="button" class="skill-option" data-action="toggle-skill" data-skill="Ventas">Ventas</button>
-        <button type="button" class="skill-option" data-action="toggle-skill" data-skill="Operaciones">Operaciones</button>
+        <button type="button" class="skill-option" data-action="toggle-skill" data-skill="Restaurantes">Restaurantes</button>
+        <button type="button" class="skill-option" data-action="toggle-skill" data-skill="Textil">Textil</button>
+        <button type="button" class="skill-option" data-action="toggle-skill" data-skill="Diseño (UX/UI)">Diseño (UX/UI)</button>
+        <button type="button" class="skill-option" data-action="toggle-skill" data-skill="Tecnología/Software">Tecnología/Software</button>
         <button type="button" class="skill-option" data-action="toggle-skill" data-skill="Marketing">Marketing</button>
-        <button type="button" class="skill-option" data-action="toggle-skill" data-skill="Finanzas">Finanzas</button>
+        <button type="button" class="skill-option" data-action="toggle-skill" data-skill="Ventas/comercial">Ventas/comercial</button>
+        <button type="button" class="skill-option" data-action="toggle-skill" data-skill="Operaciones">Operaciones</button>
+        <button type="button" class="skill-option" data-action="toggle-skill" data-skill="Finanzas/contabilidad">Finanzas/contabilidad</button>
+        <button type="button" class="skill-option" data-action="toggle-skill" data-skill="Agricultura">Agricultura</button>
+        <button type="button" class="skill-option" data-action="toggle-skill" data-skill="Minería/energía">Minería/energía</button>
+        <button type="button" class="skill-option" data-action="toggle-skill" data-skill="Consumo minorista/mayorista">Consumo minorista/mayorista</button>
+        <button type="button" class="skill-option" data-action="toggle-skill" data-skill="Importaciones/exportaciones">Importaciones/exportaciones</button>
+        <button type="button" class="skill-option" data-action="toggle-skill" data-skill="Salud">Salud</button>
+        <button type="button" class="skill-option" data-action="toggle-skill" data-skill="Electrónica">Electrónica</button>
+        <button type="button" class="skill-option" data-action="toggle-skill" data-skill="Otro">Otro</button>
       </div>
+      <input id="skillOtherInput" type="text" placeholder="¿Cuál? Escribe tu área" style="display:none;margin-top:10px;width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font-family:'JetBrains Mono',monospace;font-size:.78rem">
     </div>
 
 
@@ -10663,14 +10672,14 @@ else if(a==="do-login") window.handleLogin();
   else if(a==="home-comp"){ state.homeComp=btn.dataset.comp; state.selectedOpportunity=0; renderDashboard(); }
   else if(a==="select-opportunity"){ state.selectedOpportunity=Number(btn.dataset.index)||0; renderDashboard(); }
   else if(a==="save-profile-complete") saveProfileComplete();
-  else if(a==="toggle-skill") btn.classList.toggle("active");
+  else if(a==="toggle-skill"){ btn.classList.toggle("active"); if(btn.dataset.skill==="Otro"){ var _oi=document.getElementById("skillOtherInput"); if(_oi){ var _on=btn.classList.contains("active"); _oi.style.display=_on?"block":"none"; if(_on)_oi.focus(); } } }
   else if(a==="edit-profile") editProfile();
   else if(a==="account-tab") setAccountTab(btn.dataset.tab);
   else if(a==="save-job") saveSelectedJob();
   else if(a==="remove-saved-job") removeSavedJob(Number(btn.dataset.index));
   else if(a==="complete-profile-demo") completeProfileDemo();
   else if(a==="save-profile-complete") saveProfileComplete();
-  else if(a==="toggle-skill") btn.classList.toggle("active");
+  else if(a==="toggle-skill"){ btn.classList.toggle("active"); if(btn.dataset.skill==="Otro"){ var _oi=document.getElementById("skillOtherInput"); if(_oi){ var _on=btn.classList.contains("active"); _oi.style.display=_on?"block":"none"; if(_on)_oi.focus(); } } }
   else if(a==="edit-profile") editProfile();
   else if(a==="open-job-modal") openJobModal();
   else if(a==="publish-job-demo") publishJobDemo();
