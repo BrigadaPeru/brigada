@@ -5797,6 +5797,104 @@ window.brigadaStartFeedbackRealtime = function(){
       .subscribe();
   } catch(e){ console.error("feedback realtime:", e); }
 };
+  // ============================================
+// FEEDBACK — respuestas reales (responder / ver / borrar)
+// ============================================
+
+window.brigadaLoadFeedback = async function(){
+  try {
+    const { data: { session } } = await window.brigadaSupabase.auth.getSession();
+    const myId = session ? session.user.id : null;
+    const { data: posts, error } = await window.brigadaSupabase.from("feedback_posts")
+      .select("*").order("created_at", { ascending:false });
+    if(error) return { ok:false, error:error.message };
+    let answers = [];
+    if(posts && posts.length){
+      const ids = posts.map(function(p){ return p.id; });
+      const ans = await window.brigadaSupabase.from("feedback_answers")
+        .select("*").in("post_id", ids).order("created_at", { ascending:true });
+      answers = ans.data || [];
+    }
+    return { ok:true, posts:posts || [], answers:answers, myId:myId };
+  } catch(e){ return { ok:false, error:e.message }; }
+};
+
+window.brigadaRefreshFeedback = async function(){
+  try {
+    if(window.brigadaStartFeedbackRealtime) window.brigadaStartFeedbackRealtime();
+    const res = await window.brigadaLoadFeedback();
+    if(!res || !res.ok){ console.error("refreshFeedback:", res && res.error); return; }
+    var byPost = {};
+    (res.answers || []).forEach(function(a){
+      (byPost[a.post_id] = byPost[a.post_id] || []).push({
+        id: a.id,
+        author: a.author_name || "Usuario",
+        content: a.content || "",
+        timeAgo: window.brigadaTimeAgo(a.created_at),
+        mine: (res.myId && a.user_id === res.myId)
+      });
+    });
+    feedbackPosts.length = 0;
+    (res.posts || []).forEach(function(p){
+      feedbackPosts.push({
+        id: p.id,
+        feed: p.feed,
+        tag: "",
+        author: p.author_name || "Usuario",
+        meta: p.author_meta || "",
+        title: p.title || "",
+        body: p.body || "(sin contexto)",
+        answer: "",
+        answers: byPost[p.id] || [],
+        cta: p.feed==="people" ? "Ver perfil" : "Ver startup",
+        mine: (res.myId && p.user_id === res.myId),
+        isAnonymous: !!p.is_anonymous
+      });
+    });
+    if(typeof renderFeedback === "function") renderFeedback();
+  } catch(e){ console.error("refreshFeedback excepción:", e); }
+};
+
+window.brigadaRenderAnswers = function(p){
+  var list = (p && p.answers) ? p.answers : [];
+  if(!list.length){
+    return '<div class="highlight"><strong>Sé el primero en responder</strong><p>Aún no hay respuestas. Aporta una idea concreta y útil.</p></div>';
+  }
+  var head = '<strong style="display:block;font-size:.9rem;margin:10px 0 4px">' + list.length + ' ' + (list.length===1?"respuesta":"respuestas") + '</strong>';
+  var items = list.map(function(a){
+    var del = a.mine ? ' · <button data-action="delete-answer" data-id="'+a.id+'" style="background:none;border:0;color:#c0392b;cursor:pointer;font-size:.78rem;padding:0">borrar</button>' : '';
+    return '<div style="border-top:1px dashed var(--line);padding:10px 0"><div style="font-size:.82rem;color:var(--mute);margin-bottom:3px"><strong style="color:var(--ink)">'+a.author+'</strong> · '+a.timeAgo+del+'</div><div style="font-size:.92rem;color:var(--ink)">'+a.content+'</div></div>';
+  }).join("");
+  return '<div style="margin-top:8px">' + head + items + '</div>';
+};
+
+window.brigadaPublishAnswer = async function(postId){
+  try {
+    const { data: { session } } = await window.brigadaSupabase.auth.getSession();
+    if(!session){ showToast("Inicia sesión para responder."); return; }
+    const el = document.getElementById("fbAnswerInput" + postId);
+    const content = (el ? el.value : "").trim();
+    if(!content){ showToast("Escribe una respuesta antes de publicar."); return; }
+    const u = authState.user || {};
+    const { error } = await window.brigadaSupabase.from("feedback_answers").insert({
+      post_id: postId, user_id: session.user.id, author_name: (u.name || "Usuario"), content: content
+    });
+    if(error){ showToast("No se pudo publicar: " + error.message); return; }
+    if(el) el.value = "";
+    showToast("Respuesta publicada.");
+    await window.brigadaRefreshFeedback();
+  } catch(e){ showToast("Error: " + e.message); }
+};
+
+window.brigadaDeleteAnswer = async function(answerId){
+  try {
+    if(!confirm("¿Borrar tu respuesta?")) return;
+    const { error } = await window.brigadaSupabase.from("feedback_answers").delete().eq("id", answerId);
+    if(error){ showToast("No se pudo borrar: " + error.message); return; }
+    showToast("Respuesta borrada.");
+    await window.brigadaRefreshFeedback();
+  } catch(e){ showToast("Error: " + e.message); }
+};
   function convertPublicationToOpportunity(pub){
   // Convierte una publicación del talento al formato esperado por el dashboard.
   // CRÍTICO: usa los datos del AUTOR guardados DENTRO de la publicación (pub.author),
@@ -7828,10 +7926,10 @@ function renderFeedback(){
       ${!p.mine ? `<button class="feedback-action" data-action="fake" data-message="Abriendo ${(p.cta||'').toLowerCase()} en modo demo.">${p.cta}</button>` : ""}
     </div>
     <div class="feedback-answer" id="feedbackAnswer${feed}${i}">
-      <textarea placeholder="Escribe una respuesta concreta y útil."></textarea>
-      <button class="btn soft" style="margin-top:8px" data-action="fake" data-message="Respuesta publicada en modo demo.">Publicar respuesta</button>
+      <textarea id="fbAnswerInput${p.id}" placeholder="Escribe una respuesta concreta y útil."></textarea>
+      <button class="btn soft" style="margin-top:8px" data-action="publish-answer" data-id="${p.id}">Publicar respuesta</button>
     </div>
-    <div class="highlight"><strong>Respuesta destacada</strong><p>${p.answer}</p></div>
+    ${window.brigadaRenderAnswers ? window.brigadaRenderAnswers(p) : ""}
   </article>`).join(""));
 
   side.innerHTML = feed==="startups"
@@ -10226,7 +10324,7 @@ else if(a==="do-login") window.handleLogin();
   else if(a==="story-save") saveStory(Number(btn.dataset.index));
   else if(a==="open-feedback") openFeedbackModal();
   else if(a==="feedback-feed") setFeedbackFeed(btn.dataset.feed);
-  else if(a==="toggle-feedback-answer") toggleFeedbackAnswer(Number(btn.dataset.index),btn.dataset.feed);
+  else if(a==="toggle-feedback-answer") toggleFeedbackAnswer(Number(btn.dataset.index),btn.dataset.feed); else if(a==="publish-answer") window.brigadaPublishAnswer(btn.dataset.id); else if(a==="delete-answer") window.brigadaDeleteAnswer(btn.dataset.id);
   else if(a==="feedback-response") openFeedbackResponse(Number(btn.dataset.index));
   else if(a==="open-conversation") openConversation(btn.dataset.id);
   else if(a==="send-chat") sendChatMessage();
