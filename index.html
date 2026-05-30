@@ -5594,6 +5594,67 @@ window.brigadaShowClappers = async function(storyId){
     : '<p style="color:var(--soft)">Todavía nadie ha aplaudido esta historia. ¡Sé el primero!</p>';
   document.getElementById("modalContent").innerHTML = '<button class="modal-close" data-action="close-modal">×</button><h3>Aplausos 👏</h3><div class="modal-sub">'+list.length+' '+(list.length===1?"persona aplaudió":"personas aplaudieron")+'</div><div class="day-comments-thread" style="margin-top:8px">'+itemsHtml+'</div>';
 };
+  // ============================================
+// COMENTARIOS — recientes primero + editar/borrar
+// ============================================
+
+window.brigadaRefreshStories = async function(){
+  try {
+    const { data: { session } } = await window.brigadaSupabase.auth.getSession();
+    const myId = session ? session.user.id : null;
+    const res = await window.brigadaLoadStories();
+    if(!res || !res.ok){ console.error("refreshStories:", res && res.error); return; }
+    if(!state.userClaps) state.userClaps = {};
+    startupStories.length = 0;
+    (res.stories || []).forEach(function(row){
+      state.userClaps[row.id] = !!row.iClapped;
+      var cms = (row.comments || []).slice().reverse();
+      startupStories.push({
+        id: row.id,
+        startup: row.startup_name || "Startup",
+        initials: row.initials || "??",
+        stage: row.stage || "",
+        team: "",
+        timeAgo: window.brigadaTimeAgo(row.created_at),
+        title: row.title || "",
+        detail: row.detail || "",
+        mood: row.mood || "win",
+        photo: "",
+        photoUrl: row.photo_url || "",
+        claps: Math.max((row.claps_count || 0) - (row.iClapped ? 1 : 0), 0),
+        comments: cms.map(function(c){
+          return { id: c.id, mine: (myId && c.user_id === myId), author: c.author_name || "Usuario", role: c.author_role || "", text: c.content || "", timeAgo: window.brigadaTimeAgo(c.created_at) };
+        })
+      });
+    });
+    if(typeof renderStories === "function") renderStories();
+  } catch(e){ console.error("refreshStories excepción:", e); }
+};
+
+window.brigadaDeleteComment = async function(commentId){
+  try {
+    if(!confirm("¿Borrar este comentario?")) return;
+    const { error } = await window.brigadaSupabase.from("story_comments").delete().eq("id", commentId);
+    if(error){ showToast("No se pudo borrar: " + error.message); return; }
+    showToast("Comentario borrado.");
+    await window.brigadaRefreshStories();
+  } catch(e){ showToast("Error: " + e.message); }
+};
+
+window.brigadaEditComment = async function(commentId){
+  try {
+    const { data } = await window.brigadaSupabase.from("story_comments").select("content").eq("id", commentId).single();
+    const current = (data && data.content) || "";
+    const nuevo = prompt("Edita tu comentario:", current);
+    if(nuevo === null) return;
+    const txt = nuevo.trim();
+    if(!txt){ showToast("El comentario no puede quedar vacío."); return; }
+    const upd = await window.brigadaSupabase.from("story_comments").update({ content: txt }).eq("id", commentId);
+    if(upd.error){ showToast("No se pudo editar: " + upd.error.message); return; }
+    showToast("Comentario actualizado.");
+    await window.brigadaRefreshStories();
+  } catch(e){ showToast("Error: " + e.message); }
+};
   function convertPublicationToOpportunity(pub){
   // Convierte una publicación del talento al formato esperado por el dashboard.
   // CRÍTICO: usa los datos del AUTOR guardados DENTRO de la publicación (pub.author),
@@ -6393,7 +6454,7 @@ function renderStories(){
 
       <div class="day-stats-bar">
         <button class="day-stat" data-action="show-clappers" data-id="${s.id}" style="background:none;border:0;cursor:pointer;font:inherit;color:inherit;padding:0">👏 ${(s.claps || 0) + (userHasClapped ? 1 : 0)} aplausos</button>
-        <span class="day-stat">💬 ${totalCommentsHere} ${totalCommentsHere === 1 ? "comentario" : "comentarios"}</span>
+        <button class="day-stat" data-action="toggle-story-comments-expand" data-id="${s.id}" style="background:none;border:0;cursor:pointer;font:inherit;color:inherit;padding:0">💬 ${totalCommentsHere} ${totalCommentsHere === 1 ? "comentario" : "comentarios"}</button>
       </div>
 
       <div class="day-actions-v2">
@@ -6416,7 +6477,7 @@ function renderStories(){
           <div class="day-comment-avatar">${c.author.split(" ").map(w=>w[0]).slice(0,2).join("").toUpperCase()}</div>
           <div class="day-comment-bubble">
             <div class="day-comment-meta"><strong>${c.author}</strong><span>${c.role} · ${c.timeAgo}</span></div>
-            <p>${c.text}</p>
+            <p>${c.text}</p>${c.mine ? `<div style="margin-top:4px;display:flex;gap:12px"><button data-action="edit-comment" data-id="${c.id}" style="background:none;border:0;color:var(--blue700);font-family:'JetBrains Mono',monospace;font-size:.68rem;cursor:pointer;padding:0">editar</button><button data-action="delete-comment" data-id="${c.id}" style="background:none;border:0;color:#c0392b;font-family:'JetBrains Mono',monospace;font-size:.68rem;cursor:pointer;padding:0">borrar</button></div>` : ""}${c.mine ? `<div style="margin-top:4px;display:flex;gap:12px"><button data-action="edit-comment" data-id="${c.id}" style="background:none;border:0;color:var(--blue700);font-family:'JetBrains Mono',monospace;font-size:.68rem;cursor:pointer;padding:0">editar</button><button data-action="delete-comment" data-id="${c.id}" style="background:none;border:0;color:#c0392b;font-family:'JetBrains Mono',monospace;font-size:.68rem;cursor:pointer;padding:0">borrar</button></div>` : ""}
           </div>
         </div>`).join("")}
         ${moreCommentsCount > 0 ? `<button class="day-comments-more" data-action="toggle-story-comments-expand" data-id="${s.id}">Ver ${moreCommentsCount} ${moreCommentsCount === 1 ? "comentario más" : "comentarios más"} ↓</button>` : (showAllComments && totalCommentsHere > 2 ? `<button class="day-comments-more" data-action="toggle-story-comments-expand" data-id="${s.id}">Ocultar comentarios ↑</button>` : "")}
@@ -10019,7 +10080,7 @@ else if(a==="do-login") window.handleLogin();
   else if(a==="toggle-story-more") toggleStoryMore(Number(btn.dataset.index));
   else if(a==="toggle-story-comments-expand") toggleStoryCommentsExpand(btn.dataset.id);
   else if(a==="story-clap") window.brigadaClapAndRefresh(btn.dataset.id); else if(a==="show-clappers") window.brigadaShowClappers(btn.dataset.id); else if(a==="show-clappers") window.brigadaShowClappers(btn.dataset.id);
-  else if(a==="publish-story-comment") window.brigadaPublishComment(btn.dataset.id);
+  else if(a==="publish-story-comment") window.brigadaPublishComment(btn.dataset.id); else if(a==="delete-comment") window.brigadaDeleteComment(btn.dataset.id); else if(a==="edit-comment") window.brigadaEditComment(btn.dataset.id); else if(a==="delete-comment") window.brigadaDeleteComment(btn.dataset.id); else if(a==="edit-comment") window.brigadaEditComment(btn.dataset.id);
   else if(a==="story-save") saveStory(Number(btn.dataset.index));
   else if(a==="open-feedback") openFeedbackModal();
   else if(a==="feedback-feed") setFeedbackFeed(btn.dataset.feed);
