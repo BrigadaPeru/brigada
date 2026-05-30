@@ -5895,6 +5895,75 @@ window.brigadaDeleteAnswer = async function(answerId){
     await window.brigadaRefreshFeedback();
   } catch(e){ showToast("Error: " + e.message); }
 };
+  // ============================================
+// FEEDBACK — editar respuesta + menú ⋯ (Editar/Eliminar)
+// ============================================
+
+window.brigadaEditAnswer = async function(answerId){
+  try {
+    const { data } = await window.brigadaSupabase.from("feedback_answers").select("content").eq("id", answerId).single();
+    const current = (data && data.content) || "";
+    const nuevo = prompt("Edita tu respuesta:", current);
+    if(nuevo === null) return;
+    const txt = nuevo.trim();
+    if(!txt){ showToast("La respuesta no puede quedar vacía."); return; }
+    const upd = await window.brigadaSupabase.from("feedback_answers").update({ content: txt }).eq("id", answerId);
+    if(upd.error){ showToast("No se pudo editar: " + upd.error.message); return; }
+    showToast("Respuesta actualizada.");
+    await window.brigadaRefreshFeedback();
+  } catch(e){ showToast("Error: " + e.message); }
+};
+
+window.brigadaAnswerMenuId = null;
+window.brigadaEnsureAnswerMenu = function(){
+  var menu = document.getElementById("brigadaAnswerMenu");
+  if(menu) return menu;
+  menu = document.createElement("div");
+  menu.id = "brigadaAnswerMenu";
+  menu.style.cssText = "position:fixed;display:none;z-index:9999;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 26px rgba(24,36,50,.18);overflow:hidden;min-width:130px";
+  menu.innerHTML = '<button type="button" id="brigadaAmEdit" style="display:block;width:100%;text-align:left;background:none;border:0;padding:11px 16px;cursor:pointer;font-size:.82rem;color:var(--ink);font-family:inherit">Editar</button><button type="button" id="brigadaAmDel" style="display:block;width:100%;text-align:left;background:none;border:0;padding:11px 16px;cursor:pointer;font-size:.82rem;color:#c0392b;font-family:inherit">Eliminar</button>';
+  document.body.appendChild(menu);
+  document.getElementById("brigadaAmEdit").addEventListener("click", function(e){
+    e.stopPropagation(); menu.style.display = "none";
+    if(window.brigadaAnswerMenuId && window.brigadaEditAnswer) window.brigadaEditAnswer(window.brigadaAnswerMenuId);
+  });
+  document.getElementById("brigadaAmDel").addEventListener("click", function(e){
+    e.stopPropagation(); menu.style.display = "none";
+    if(window.brigadaAnswerMenuId && window.brigadaDeleteAnswer) window.brigadaDeleteAnswer(window.brigadaAnswerMenuId);
+  });
+  return menu;
+};
+window.brigadaToggleAnswerMenu = function(btn, answerId, ev){
+  if(ev) ev.stopPropagation();
+  var menu = window.brigadaEnsureAnswerMenu();
+  if(menu.style.display === "block" && window.brigadaAnswerMenuId === answerId){
+    menu.style.display = "none"; window.brigadaAnswerMenuId = null; return;
+  }
+  window.brigadaAnswerMenuId = answerId;
+  menu.style.display = "block";
+  var r = btn.getBoundingClientRect();
+  var mw = menu.offsetWidth || 130;
+  var left = r.right - mw; if(left < 8) left = 8;
+  menu.style.left = left + "px";
+  menu.style.top = (r.bottom + 4) + "px";
+};
+document.addEventListener("click", function(){
+  var menu = document.getElementById("brigadaAnswerMenu");
+  if(menu && menu.style.display === "block"){ menu.style.display = "none"; window.brigadaAnswerMenuId = null; }
+});
+
+window.brigadaRenderAnswers = function(p){
+  var list = (p && p.answers) ? p.answers : [];
+  if(!list.length){
+    return '<div class="highlight"><strong>Sé el primero en responder</strong><p>Aún no hay respuestas. Aporta una idea concreta y útil.</p></div>';
+  }
+  var head = '<strong style="display:block;font-size:.9rem;margin:10px 0 4px">' + list.length + ' ' + (list.length===1?"respuesta":"respuestas") + '</strong>';
+  var items = list.map(function(a){
+    var dots = a.mine ? '<button type="button" onclick="window.brigadaToggleAnswerMenu(this,\''+a.id+'\',event)" style="position:absolute;top:8px;right:6px;background:none;border:0;color:var(--soft);cursor:pointer;font-size:18px;line-height:1;padding:2px 4px">⋯</button>' : '';
+    return '<div style="position:relative;border-top:1px dashed var(--line);padding:10px 24px 10px 0"><div style="font-size:.82rem;color:var(--mute);margin-bottom:3px"><strong style="color:var(--ink)">'+a.author+'</strong> · '+a.timeAgo+'</div><div style="font-size:.92rem;color:var(--ink)">'+a.content+'</div>'+dots+'</div>';
+  }).join("");
+  return '<div style="margin-top:8px">' + head + items + '</div>';
+};
   function convertPublicationToOpportunity(pub){
   // Convierte una publicación del talento al formato esperado por el dashboard.
   // CRÍTICO: usa los datos del AUTOR guardados DENTRO de la publicación (pub.author),
