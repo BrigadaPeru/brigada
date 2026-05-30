@@ -6063,7 +6063,7 @@ function renderStories(){
           <span class="day-startup-avatar">${s.initials}</span>
           <span class="day-startup-text">
             <span class="day-startup-name">${s.startup}</span>
-            <span class="day-startup-meta">${s.stage} · ${s.team} · ${s.timeAgo}</span>
+            <span class="day-startup-meta">${[s.stage,s.timeAgo].filter(Boolean).join(" · ")}</span>
           </span>
         </button>
         <span class="day-mood-badge mood-${s.mood}">${moodIcon} ${moodLabel}</span>
@@ -6244,7 +6244,7 @@ function saveStory(index){
   showToast(s ? `Historia de ${s.startup} guardada para revisar después.` : "Historia guardada.");
 }
 
-function showStoriesPage(){if(!requireAuth())return;hideAll();setActiveNav("stories");$("storiesPage").classList.remove("hidden");$("storiesPage").classList.add("active");renderStories();scrollTo(0,0)}
+function showStoriesPage(){if(!requireAuth())return;hideAll();setActiveNav("stories");$("storiesPage").classList.remove("hidden");$("storiesPage").classList.add("active");window.brigadaRefreshStories();scrollTo(0,0)}
 
 function setFeedbackFeed(feed){
   state.feedbackFeed=feed||"startups";
@@ -9705,13 +9705,13 @@ else if(a==="do-login") window.handleLogin();
   else if(a==="contact") openContact(btn.dataset.id);
   else if(a==="send-contact") sendContactRequest(btn.dataset.id);
   else if(a==="open-story") openStoryModal();
-  else if(a==="submit-story") submitStory();
+  else if(a==="submit-story") window.brigadaSubmitStory();
   else if(a==="story-help") openStoryHelp(Number(btn.dataset.index));
   else if(a==="toggle-story-comment") toggleStoryComment(btn.dataset.id);
   else if(a==="toggle-story-more") toggleStoryMore(Number(btn.dataset.index));
   else if(a==="toggle-story-comments-expand") toggleStoryCommentsExpand(btn.dataset.id);
-  else if(a==="story-clap") clapStory(btn.dataset.id);
-  else if(a==="publish-story-comment") publishStoryComment(btn.dataset.id);
+  else if(a==="story-clap") window.brigadaClapAndRefresh(btn.dataset.id);
+  else if(a==="publish-story-comment") window.brigadaPublishComment(btn.dataset.id);
   else if(a==="story-save") saveStory(Number(btn.dataset.index));
   else if(a==="open-feedback") openFeedbackModal();
   else if(a==="feedback-feed") setFeedbackFeed(btn.dataset.feed);
