@@ -5589,7 +5589,7 @@ window.brigadaShowClappers = async function(storyId){
     ? list.map(function(c){
         var ini = (c.name||"?").split(" ").map(function(w){return w[0];}).filter(Boolean).slice(0,2).join("").toUpperCase();
         var rol = (c.type==="startup"||c.type==="hire") ? "Startup" : "Talento";
-        return '<div class="day-comment-item"><div class="day-comment-avatar">'+ini+'</div><div class="day-comment-bubble"><div class="day-comment-meta"><strong>'+(c.name||"Alguien")+'</strong><span>'+rol+' · '+c.timeAgo+'</span></div></div></div>';
+        return '<div class="day-comment-item"><div class="day-comment-avatar">'+ini+'</div><div class="day-comment-bubble" style="position:relative"><div class="day-comment-meta"><strong>'+(c.name||"Alguien")+'</strong><span>'+rol+' · '+c.timeAgo+'</span></div></div></div>';
       }).join("")
     : '<p style="color:var(--soft)">Todavía nadie ha aplaudido esta historia. ¡Sé el primero!</p>';
   document.getElementById("modalContent").innerHTML = '<button class="modal-close" data-action="close-modal">×</button><h3>Aplausos 👏</h3><div class="modal-sub">'+list.length+' '+(list.length===1?"persona aplaudió":"personas aplaudieron")+'</div><div class="day-comments-thread" style="margin-top:8px">'+itemsHtml+'</div>';
@@ -5655,6 +5655,47 @@ window.brigadaEditComment = async function(commentId){
     await window.brigadaRefreshStories();
   } catch(e){ showToast("Error: " + e.message); }
 };
+  // ============================================
+// COMENTARIOS — menú ⋯ (no se recorta + cierra al clic fuera)
+// ============================================
+
+window.brigadaCommentMenuId = null;
+window.brigadaEnsureCommentMenu = function(){
+  var menu = document.getElementById("brigadaCommentMenu");
+  if(menu) return menu;
+  menu = document.createElement("div");
+  menu.id = "brigadaCommentMenu";
+  menu.style.cssText = "position:fixed;display:none;z-index:9999;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 26px rgba(24,36,50,.18);overflow:hidden;min-width:130px";
+  menu.innerHTML = '<button type="button" id="brigadaCmEdit" style="display:block;width:100%;text-align:left;background:none;border:0;padding:11px 16px;cursor:pointer;font-size:.82rem;color:var(--ink);font-family:inherit">Editar</button><button type="button" id="brigadaCmDel" style="display:block;width:100%;text-align:left;background:none;border:0;padding:11px 16px;cursor:pointer;font-size:.82rem;color:#c0392b;font-family:inherit">Eliminar</button>';
+  document.body.appendChild(menu);
+  document.getElementById("brigadaCmEdit").addEventListener("click", function(e){
+    e.stopPropagation(); menu.style.display = "none";
+    if(window.brigadaCommentMenuId && window.brigadaEditComment) window.brigadaEditComment(window.brigadaCommentMenuId);
+  });
+  document.getElementById("brigadaCmDel").addEventListener("click", function(e){
+    e.stopPropagation(); menu.style.display = "none";
+    if(window.brigadaCommentMenuId && window.brigadaDeleteComment) window.brigadaDeleteComment(window.brigadaCommentMenuId);
+  });
+  return menu;
+};
+window.brigadaToggleCommentMenu = function(btn, commentId, ev){
+  if(ev) ev.stopPropagation();
+  var menu = window.brigadaEnsureCommentMenu();
+  if(menu.style.display === "block" && window.brigadaCommentMenuId === commentId){
+    menu.style.display = "none"; window.brigadaCommentMenuId = null; return;
+  }
+  window.brigadaCommentMenuId = commentId;
+  menu.style.display = "block";
+  var r = btn.getBoundingClientRect();
+  var mw = menu.offsetWidth || 130;
+  var left = r.right - mw; if(left < 8) left = 8;
+  menu.style.left = left + "px";
+  menu.style.top = (r.bottom + 4) + "px";
+};
+document.addEventListener("click", function(){
+  var menu = document.getElementById("brigadaCommentMenu");
+  if(menu && menu.style.display === "block"){ menu.style.display = "none"; window.brigadaCommentMenuId = null; }
+});
   function convertPublicationToOpportunity(pub){
   // Convierte una publicación del talento al formato esperado por el dashboard.
   // CRÍTICO: usa los datos del AUTOR guardados DENTRO de la publicación (pub.author),
@@ -6475,9 +6516,9 @@ function renderStories(){
       ${totalCommentsHere > 0 ? `<div class="day-comments-thread">
         ${commentsToShow.map(c => `<div class="day-comment-item">
           <div class="day-comment-avatar">${c.author.split(" ").map(w=>w[0]).slice(0,2).join("").toUpperCase()}</div>
-          <div class="day-comment-bubble">
+          <div class="day-comment-bubble" style="position:relative">
             <div class="day-comment-meta"><strong>${c.author}</strong><span>${c.role} · ${c.timeAgo}</span></div>
-            <p data-c="${c.id}">${c.text}</p>${c.mine ? `<div style="position:relative;margin-top:4px"><button type="button" onclick="var m=document.getElementById('cmenu_${c.id}');if(m){m.style.display=(m.style.display==='block')?'none':'block';}event.stopPropagation();" style="background:none;border:0;color:var(--soft);cursor:pointer;font-size:18px;line-height:1;padding:0 4px">⋯</button><div id="cmenu_${c.id}" style="display:none;position:absolute;top:100%;left:0;z-index:30;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 22px rgba(24,36,50,.14);overflow:hidden;min-width:120px"><button data-action="edit-comment" data-id="${c.id}" style="display:block;width:100%;text-align:left;background:none;border:0;padding:9px 14px;cursor:pointer;font-size:.8rem;color:var(--ink);font-family:inherit">Editar</button><button data-action="delete-comment" data-id="${c.id}" style="display:block;width:100%;text-align:left;background:none;border:0;padding:9px 14px;cursor:pointer;font-size:.8rem;color:#c0392b;font-family:inherit">Eliminar</button></div></div>` : ""}
+            <p data-c="${c.id}">${c.text}</p>${c.mine ? `<button type="button" onclick="window.brigadaToggleCommentMenu(this,'${c.id}',event)" style="position:absolute;top:8px;right:10px;background:none;border:0;color:var(--soft);cursor:pointer;font-size:18px;line-height:1;padding:2px 4px">⋯</button>` : ""}
           </div>
         </div>`).join("")}
         ${moreCommentsCount > 0 ? `<button class="day-comments-more" data-action="toggle-story-comments-expand" data-id="${s.id}">Ver ${moreCommentsCount} ${moreCommentsCount === 1 ? "comentario más" : "comentarios más"} ↓</button>` : (showAllComments && totalCommentsHere > 2 ? `<button class="day-comments-more" data-action="toggle-story-comments-expand" data-id="${s.id}">Ocultar comentarios ↑</button>` : "")}
