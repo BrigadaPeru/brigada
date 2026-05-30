@@ -5553,6 +5553,47 @@ window.brigadaStartBellNag = function(){
   }, 5000);
 };
 window.brigadaStartBellNag();
+  // ============================================
+// APLAUSOS — lista de quién aplaudió
+// ============================================
+
+window.brigadaLoadClappers = async function(storyId){
+  try {
+    const { data: claps, error } = await window.brigadaSupabase
+      .from("story_claps").select("user_id, created_at").eq("story_id", storyId)
+      .order("created_at", { ascending:false });
+    if(error) return { ok:false, error:error.message };
+    if(!claps || !claps.length) return { ok:true, clappers:[] };
+    const ids = [...new Set(claps.map(function(c){return c.user_id;}))];
+    const { data: users } = await window.brigadaSupabase
+      .from("users").select("id,name,type").in("id", ids);
+    const byId = {};
+    (users||[]).forEach(function(u){ byId[u.id] = u; });
+    const clappers = claps.map(function(c){
+      return {
+        name: (byId[c.user_id] && byId[c.user_id].name) || "Alguien",
+        type: (byId[c.user_id] && byId[c.user_id].type) || "",
+        timeAgo: window.brigadaTimeAgo(c.created_at)
+      };
+    });
+    return { ok:true, clappers:clappers };
+  } catch(e){ return { ok:false, error:e.message }; }
+};
+
+window.brigadaShowClappers = async function(storyId){
+  document.getElementById("modalContent").innerHTML = '<button class="modal-close" data-action="close-modal">×</button><h3>Aplausos 👏</h3><div class="modal-sub">Cargando...</div>';
+  if(typeof openModalBox === "function") openModalBox();
+  const res = await window.brigadaLoadClappers(storyId);
+  const list = (res && res.ok) ? res.clappers : [];
+  const itemsHtml = list.length
+    ? list.map(function(c){
+        var ini = (c.name||"?").split(" ").map(function(w){return w[0];}).filter(Boolean).slice(0,2).join("").toUpperCase();
+        var rol = (c.type==="startup"||c.type==="hire") ? "Startup" : "Talento";
+        return '<div class="day-comment-item"><div class="day-comment-avatar">'+ini+'</div><div class="day-comment-bubble"><div class="day-comment-meta"><strong>'+(c.name||"Alguien")+'</strong><span>'+rol+' · '+c.timeAgo+'</span></div></div></div>';
+      }).join("")
+    : '<p style="color:var(--soft)">Todavía nadie ha aplaudido esta historia. ¡Sé el primero!</p>';
+  document.getElementById("modalContent").innerHTML = '<button class="modal-close" data-action="close-modal">×</button><h3>Aplausos 👏</h3><div class="modal-sub">'+list.length+' '+(list.length===1?"persona aplaudió":"personas aplaudieron")+'</div><div class="day-comments-thread" style="margin-top:8px">'+itemsHtml+'</div>';
+};
   function convertPublicationToOpportunity(pub){
   // Convierte una publicación del talento al formato esperado por el dashboard.
   // CRÍTICO: usa los datos del AUTOR guardados DENTRO de la publicación (pub.author),
@@ -6351,7 +6392,7 @@ function renderStories(){
       <button class="day-read-more-v2" data-action="toggle-story-more" data-index="${i}">${state.openStories?.[s.id] ? 'Ver menos ↑' : 'Ver más ↓'}</button>
 
       <div class="day-stats-bar">
-        <span class="day-stat">👏 ${(s.claps || 0) + (userHasClapped ? 1 : 0)} aplausos</span>
+        <button class="day-stat" data-action="show-clappers" data-id="${s.id}" style="background:none;border:0;cursor:pointer;font:inherit;color:inherit;padding:0">👏 ${(s.claps || 0) + (userHasClapped ? 1 : 0)} aplausos</button>
         <span class="day-stat">💬 ${totalCommentsHere} ${totalCommentsHere === 1 ? "comentario" : "comentarios"}</span>
       </div>
 
@@ -9977,7 +10018,7 @@ else if(a==="do-login") window.handleLogin();
   else if(a==="toggle-story-comment") toggleStoryComment(btn.dataset.id);
   else if(a==="toggle-story-more") toggleStoryMore(Number(btn.dataset.index));
   else if(a==="toggle-story-comments-expand") toggleStoryCommentsExpand(btn.dataset.id);
-  else if(a==="story-clap") window.brigadaClapAndRefresh(btn.dataset.id);
+  else if(a==="story-clap") window.brigadaClapAndRefresh(btn.dataset.id); else if(a==="show-clappers") window.brigadaShowClappers(btn.dataset.id); else if(a==="show-clappers") window.brigadaShowClappers(btn.dataset.id);
   else if(a==="publish-story-comment") window.brigadaPublishComment(btn.dataset.id);
   else if(a==="story-save") saveStory(Number(btn.dataset.index));
   else if(a==="open-feedback") openFeedbackModal();
