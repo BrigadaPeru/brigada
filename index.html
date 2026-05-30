@@ -9755,7 +9755,7 @@ function showMinimalOnboarding(type){
         <div class="field-full"><div class="field-label">Sector</div><select id="reg_startupSector">${sectorOptions}</select></div>
         <div class="field-full" id="reg_startupSectorOtherWrap" style="display:none"><div class="field-label">Especifica tu sector</div><input id="reg_startupSectorOther" placeholder="Ej: Biotech, FoodTech, etc."></div>
       </div>
-      <button class="btn" style="width:100%" data-action="finalize-onboarding" data-type="startup">Entrar a Brigada</button>
+      <button class="btn" style="width:100%;padding:16px;font-size:1rem;letter-spacing:.04em;box-shadow:0 10px 24px -8px rgba(160,82,45,.6)" data-action="finalize-onboarding" data-type="startup">Entrar a Brigada</button>
     </div>`;
     // Listener para mostrar input "Otro"
     setTimeout(() => {
@@ -9784,10 +9784,10 @@ function showMinimalOnboarding(type){
 
     <div class="field-label" style="margin-top:18px">Áreas que manejas <span style="color:var(--mute);text-transform:none;letter-spacing:0;font-size:.7rem">(elige las que apliquen)</span></div>
     <div class="onboard-areas" id="onboardAreas">
-      ${["Diseño / UX-UI","Software / tecnología","Producto","Marketing / growth","Ventas / comercial","Operaciones","Finanzas / contabilidad","Agricultura / agro","Minería / energía","Restaurantes / food","Retail / e-commerce","Salud / healthtech","Educación","Logística / comex","Legal / regulatorio","Recursos humanos","Otro"].map(a => `<button type="button" class="onboard-area-chip" data-action="toggle-area" data-area="${a}">${a}</button>`).join("")}
+      ${["Restaurantes","Textil","Diseño (UX/UI)","Tecnología/Software","Marketing","Ventas/comercial","Operaciones","Finanzas/contabilidad","Agricultura","Minería/energía","Consumo minorista/mayorista","Importaciones/exportaciones","Salud","Electrónica","Otro"].map(a => `<button type="button" class="onboard-area-chip" data-action="toggle-area" data-area="${a}">${a}</button>`).join("")}
     </div>
 
-    <button class="btn" style="width:100%;margin-top:18px" data-action="finalize-onboarding" data-type="talent">Entrar a Brigada</button>
+    <button class="btn" style="width:100%;margin-top:18px;padding:16px;font-size:1rem;letter-spacing:.04em;box-shadow:0 10px 24px -8px rgba(160,82,45,.6)" data-action="finalize-onboarding" data-type="talent">Entrar a Brigada</button>
   </div>`;
 }
 
